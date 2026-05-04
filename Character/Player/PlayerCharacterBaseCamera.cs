@@ -1,9 +1,19 @@
 using UnityEngine;
+using AYellowpaper.SerializedCollections;
+using Unity.Cinemachine;
 
 namespace Shin
 {
     public partial class PlayerCharacterBase
     {
+        #region CinemachineCamera
+
+        [SerializeField]
+        private SerializedDictionary<PLAYER_CAMERA_TYPE, CinemachineCamera> _cinemachineCameraSettings;
+
+        #endregion
+
+        
         private PlayerCamera _camera;
 
         public PlayerCamera Camera

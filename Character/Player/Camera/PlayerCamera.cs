@@ -1,4 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
+using AYellowpaper.SerializedCollections;
+using Unity.Cinemachine;
 
 
 
@@ -25,6 +28,14 @@ namespace Shin
 
         private float _pitchDegrees;
         private float _yawDegrees;
+
+
+        #region CinemachineCamera
+
+        [SerializeField]
+        private SerializedDictionary<PLAYER_CAMERA_TYPE, CinemachineCamera> _cinemachineCameraSettings;
+
+        #endregion
 
         private void Awake()
         {
@@ -80,6 +91,12 @@ namespace Shin
             return angle;
         }
     }
+}
+
+public enum PLAYER_CAMERA_TYPE
+{
+    DEFAULT,
+    SHOOT_ZOOM
 }
 
 
