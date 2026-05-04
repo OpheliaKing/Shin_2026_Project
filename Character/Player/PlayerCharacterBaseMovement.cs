@@ -4,6 +4,13 @@ namespace Shin
 {
     public partial class PlayerCharacterBase
     {
+        private Vector2 _moveInput;
+
+        public void MoveInput(Vector2 input)
+        {
+            _moveInput = input;
+        }
+
         /// <summary>
         /// 플레이어 입력(좌우·전후)을 카메라가 보는 방향 기준으로 바꾼 뒤 <see cref="Move"/>로 넘깁니다.
         /// </summary>
@@ -19,10 +26,10 @@ namespace Shin
                 return Vector2.zero;
             }
 
-            if (_cameraTransform != null)
+            if (_camera != null)
             {
-                Vector3 cameraForward = _cameraTransform.forward;
-                Vector3 cameraRight = _cameraTransform.right;
+                Vector3 cameraForward = _camera.transform.forward;
+                Vector3 cameraRight = _camera.transform.right;
                 cameraForward.y = 0f;
                 cameraRight.y = 0f;
                 cameraForward.Normalize();
