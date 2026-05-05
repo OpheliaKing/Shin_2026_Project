@@ -11,6 +11,11 @@ namespace Shin
         /// </summary>
         public void Move(Vector2 worldHorizontalDirection)
         {
+            if (!CharacterState.IsMoveAble())
+            {
+                return;
+            }
+            
             if (worldHorizontalDirection.sqrMagnitude < 1e-8f)
             {
                 return;
@@ -18,6 +23,6 @@ namespace Shin
 
             Vector3 moveDirection = new Vector3(worldHorizontalDirection.x, 0f, worldHorizontalDirection.y).normalized;
             transform.position += moveDirection * _moveSpeed * Time.deltaTime;
-        }
+        }        
     }
 }
