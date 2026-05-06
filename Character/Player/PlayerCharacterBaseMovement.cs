@@ -16,7 +16,22 @@ namespace Shin
         /// </summary>
         public void MoveFromCameraRelativeInput(Vector2 input)
         {
-            Move(ToWorldHorizontalFromCameraRelativeInput(input));
+            // 애니메이션은 입력 축 기준(전/후/좌/우)으로 처리
+            SetIntendedMoveDirection(input);
+
+            // 회전은 항상 카메라가 보는 방향(Yaw) 기준
+            if (input.sqrMagnitude >= 1e-8f && Camera != null)
+            {
+                Vector3 cameraForward = Camera.transform.forward;
+                cameraForward.y = 0f;
+                if (cameraForward.sqrMagnitude >= 1e-8f)
+                {
+                    SetIntendedLookDirection(cameraForward.normalized);
+                }
+            }
+
+            Vector2 worldMoveDirection = ToWorldHorizontalFromCameraRelativeInput(input);
+            Move(worldMoveDirection);
         }
 
         private Vector2 ToWorldHorizontalFromCameraRelativeInput(Vector2 input)
@@ -26,10 +41,10 @@ namespace Shin
                 return Vector2.zero;
             }
 
-            if (_camera != null)
+            if (Camera != null)
             {
-                Vector3 cameraForward = _camera.transform.forward;
-                Vector3 cameraRight = _camera.transform.right;
+                Vector3 cameraForward = Camera.transform.forward;
+                Vector3 cameraRight = Camera.transform.right;
                 cameraForward.y = 0f;
                 cameraRight.y = 0f;
                 cameraForward.Normalize();

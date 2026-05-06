@@ -9,6 +9,7 @@ namespace Shin
         private int _maxHealth;
 
         private CHARACTER_STATE _previousCharacterState = CHARACTER_STATE.NONE;
+        [SerializeField]
         private CHARACTER_STATE _characterState = CHARACTER_STATE.NONE;
 
         public event Action<CHARACTER_STATE, CHARACTER_STATE> OnCharacterStateChanged;
@@ -29,6 +30,16 @@ namespace Shin
             }
         }
         
+        protected virtual void Awake()
+        {
+            Init();
+        }
+
+        protected virtual void Init()
+        {
+
+        }
+
         public bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
         {
             if (!forceChange && _characterState == nextState)
@@ -64,6 +75,11 @@ namespace Shin
 
         protected virtual void OnExitState(CHARACTER_STATE currentState, CHARACTER_STATE nextState)
         {
+        }
+
+        protected virtual void Update()
+        {
+            SetMoveAnimationByInputDirection();
         }
     }
 

@@ -5,9 +5,13 @@ namespace Shin
     public partial class PlayerCharacterBase : CharacterBase
     {
 
-
-        private void Update()
+        protected override void Init()
         {
+            CameraInit();
+        }
+        protected override void Update()
+        {
+            base.Update();
             MoveFromCameraRelativeInput(_moveInput);
         }
     }

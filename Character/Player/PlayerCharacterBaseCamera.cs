@@ -28,6 +28,24 @@ namespace Shin
             }
         }
 
+        private void CameraInit()
+        {
+            _camera = GetComponentInChildren<PlayerCamera>();
+            if (_camera == null)
+            {
+                Debug.Log("Not Found PlayerCamera!!!");
+            }
+
+            var cameraParent = GetComponentInChildren<TargetFollowObject>();
+            if (cameraParent == null)
+            {
+                Debug.Log("Not Found TargetFollowObject!!!");
+            }
+
+            cameraParent.SetTarget(transform);
+            cameraParent.transform.parent = null;
+        }
+
         public void MoveCamera(Vector2 input)
         {
             if (Camera != null)
