@@ -33,9 +33,11 @@ namespace Shin
 
             if (worldHorizontalDirection.sqrMagnitude < 1e-8f)
             {
+                ChangeCharacterState(CHARACTER_STATE.IDLE);
                 return;
             }
 
+            ChangeCharacterState(CHARACTER_STATE.MOVE);
             Vector3 moveDirection = new Vector3(worldHorizontalDirection.x, 0f, worldHorizontalDirection.y).normalized;
             transform.position += moveDirection * GetMovementSpeed() * Time.deltaTime;
             RotateTowards(GetCurrentLookDirectionOr(moveDirection));
@@ -73,6 +75,11 @@ namespace Shin
             Quaternion targetRotation = Quaternion.LookRotation(worldMoveDirection, Vector3.up);
             float t = Mathf.Clamp01(Time.deltaTime * _rotationLerpSpeed);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, t);
+        }
+
+        public void SetMovementState(MOVEMENT_STATE state)
+        {
+            _movementState = state;
         }
 
         public float GetMovementSpeed()

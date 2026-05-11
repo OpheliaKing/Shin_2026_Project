@@ -42,6 +42,14 @@ namespace Shin
 
         }
 
+        public void OnShift_Left(InputValue value)
+        {
+            if (Player != null)
+            {
+                Player.Shift_Left_Input(value.Get<float>());
+            }
+        }
+
         public void OnMove_Camera(InputValue value)
         {
             if (Player != null)

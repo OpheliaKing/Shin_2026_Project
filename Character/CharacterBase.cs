@@ -40,7 +40,7 @@ namespace Shin
 
         }
 
-        public bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
+        protected bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
         {
             if (!forceChange && _characterState == nextState)
             {

@@ -57,5 +57,14 @@ namespace Shin
             Vector3 worldAxis = new Vector3(input.x, 0f, input.y).normalized;
             return new Vector2(worldAxis.x, worldAxis.z);
         }
+
+        public void Shift_Left_Input(float value)
+        {
+            Debug.Log("Shift_Left_Input: " + value);
+
+            MOVEMENT_STATE state = value > 0f ? MOVEMENT_STATE.RUN : MOVEMENT_STATE.WALK;
+
+            SetMovementState(state);
+        }
     }
 }
