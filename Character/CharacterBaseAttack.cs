@@ -44,6 +44,8 @@ namespace Shin
         /// <summary>Animator/클립 기준으로 보이는 현재 공격 애니메이션 식별 문자열.</summary>
         public string CurrentPlayAttackAnim => _currentPlayAttackAnim;
 
+        private bool _hasQueuedComboInput;
+        private INPUT_TYPE _queuedComboInput;
 
         public void AttackInput(INPUT_TYPE inputType)
         {
@@ -58,19 +60,28 @@ namespace Shin
                 {
                     Attack(attackTid);
                 }
+
+                return;
             }
-            else
+
+            if (!IsInComboBufferableState(CharacterState))
             {
-                AttackData attackData = Array.Find(_attackData, data => data.Tid == _currentAttackTid);
-
-                attackData.LinkedAttack.TryGetValue(inputType, out string linkedAttackTid);
-                if (!linkedAttackTid.IsNullOrEmpty())
-                {
-                    Attack(linkedAttackTid);
-                }
+                return;
             }
 
+            AttackData currentAttack = FindAttackData(_currentAttackTid);
+            if (currentAttack == null)
+            {
+                return;
+            }
 
+            if (!currentAttack.LinkedAttack.TryGetValue(inputType, out string nextTid) || string.IsNullOrEmpty(nextTid))
+            {
+                return;
+            }
+
+            _queuedComboInput = inputType;
+            _hasQueuedComboInput = true;
         }
 
         public void Attack(string attackTid)
@@ -80,17 +91,117 @@ namespace Shin
                 return;
             }
 
-            AttackData attackData = Array.Find(_attackData, data => data.Tid == attackTid);
+            AttackData attackData = FindAttackData(attackTid);
             if (attackData == null)
             {
                 return;
             }
 
+            _hasQueuedComboInput = false;
+
             ChangeCharacterState(CHARACTER_STATE.ATTACK);
 
             attackData.AttackStartEvent?.Invoke();
-            _animator.Play(attackData.AnimationName);
+            _animator.CrossFade(attackData.AnimationName,0.2f);
             _currentAttackTid = attackTid;
+        }
+
+        private void LateUpdate()
+        {
+            TryConsumeQueuedComboAttack();
+        }
+
+        private static bool IsInComboBufferableState(CHARACTER_STATE state)
+        {
+            return state == CHARACTER_STATE.ATTACK || state == CHARACTER_STATE.ATTACK_MOVEABLE;
+        }
+
+        private void TryConsumeQueuedComboAttack()
+        {
+            if (!_hasQueuedComboInput)
+            {
+                return;
+            }
+
+            if (!IsInComboBufferableState(CharacterState))
+            {
+                _hasQueuedComboInput = false;
+                return;
+            }
+
+            if (_currentAttackTid.IsNullOrEmpty())
+            {
+                _hasQueuedComboInput = false;
+                return;
+            }
+
+            AttackData currentAttack = FindAttackData(_currentAttackTid);
+            if (currentAttack == null)
+            {
+                _hasQueuedComboInput = false;
+                return;
+            }
+
+            if (GetPrimaryLayerNormalizedTime() < currentAttack.NextAttackChainUnlockNormalizedTime)
+            {
+                return;
+            }
+
+            if (!currentAttack.LinkedAttack.TryGetValue(_queuedComboInput, out string nextTid) || string.IsNullOrEmpty(nextTid))
+            {
+                _hasQueuedComboInput = false;
+                return;
+            }
+
+            _hasQueuedComboInput = false;
+            Attack(nextTid);
+        }
+
+        private float GetPrimaryLayerNormalizedTime()
+        {
+            if (_animator == null)
+            {
+                return 0f;
+            }
+
+            AnimatorStateInfo info = _animator.GetCurrentAnimatorStateInfo(0);
+            float nt = info.normalizedTime;
+            if (info.loop)
+            {
+                nt -= Mathf.Floor(nt);
+            }
+            else
+            {
+                nt = Mathf.Clamp01(nt);
+            }
+
+            return nt;
+        }
+
+        private AttackData FindAttackData(string attackTid)
+        {
+            if (_attackData == null || string.IsNullOrEmpty(attackTid))
+            {
+                return null;
+            }
+
+            return Array.Find(_attackData, data => data.Tid == attackTid);
+        }
+
+        partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState)
+        {
+            if (currentState == CHARACTER_STATE.ATTACK || currentState == CHARACTER_STATE.ATTACK_MOVEABLE)
+            {
+                if (nextState != CHARACTER_STATE.ATTACK && nextState != CHARACTER_STATE.ATTACK_MOVEABLE)
+                {
+                    if (!_currentAttackTid.IsNullOrEmpty())
+                    {
+                        FindAttackData(_currentAttackTid)?.AttackEndEvent?.Invoke();
+                    }
+
+                    ClearAttackComboBufferAndCurrentTid();
+                }
+            }
         }
 
         /// <summary>공격 상태 애니메이션이 재생되기 시작했을 때(StateMachineBehaviour OnStateEnter).</summary>
@@ -102,10 +213,47 @@ namespace Shin
         /// <summary>공격 상태 애니메이션이 끝났을 때(StateMachineBehaviour OnStateExit).</summary>
         public virtual void OnCombatAnimationPlayEnded(string animatorStateDisplayName)
         {
+            Debug.Log($"OnCombatAnimationPlayEnded: {animatorStateDisplayName}");
             if (_currentPlayAttackAnim == animatorStateDisplayName)
             {
                 _currentPlayAttackAnim = null;
             }
+
+            if (!IsInComboBufferableState(CharacterState))
+            {
+                return;
+            }
+
+            AttackData currentAttack = FindAttackData(_currentAttackTid);
+            if (currentAttack == null)
+            {
+                return;
+            }
+
+            if (!DoesCombatAnimDisplayMatchAttack(currentAttack, animatorStateDisplayName))
+            {
+                return;
+            }
+
+            currentAttack.AttackEndEvent?.Invoke();
+            ClearAttackComboBufferAndCurrentTid();
+            ChangeCharacterState(CHARACTER_STATE.IDLE);
+        }
+
+        private static bool DoesCombatAnimDisplayMatchAttack(AttackData attack, string animatorStateDisplayName)
+        {
+            if (attack == null || animatorStateDisplayName.IsNullOrEmpty())
+            {
+                return false;
+            }
+
+            return animatorStateDisplayName == attack.AnimationName;
+        }
+
+        private void ClearAttackComboBufferAndCurrentTid()
+        {
+            _hasQueuedComboInput = false;
+            _currentAttackTid = null;
         }
 
         /// <summary>애니메이션 정규화 시간 구간에서 데미지 판정이 필요할 때 호출됩니다.</summary>
@@ -143,6 +291,10 @@ namespace Shin
         public string Tid;
         public ATTACK_TYPE AttackType;
         public string AnimationName;
+
+        [Range(0f, 1f)]
+        [Tooltip("현재 공격 애니메이션(레이어 0) 정규화 시간이 이 값 이상일 때, 버퍼에 쌓인 LinkedAttack 입력으로 다음 공격이 실행됩니다.")]
+        public float NextAttackChainUnlockNormalizedTime = 0.35f;
 
         public SerializedDictionary<INPUT_TYPE, string> LinkedAttack = new SerializedDictionary<INPUT_TYPE, string>();
 

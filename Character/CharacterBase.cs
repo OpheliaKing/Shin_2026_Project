@@ -75,7 +75,10 @@ namespace Shin
 
         protected virtual void OnExitState(CHARACTER_STATE currentState, CHARACTER_STATE nextState)
         {
+            OnExitState_AttackComboHook(currentState, nextState);
         }
+
+        partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState);
 
         protected virtual void Update()
         {

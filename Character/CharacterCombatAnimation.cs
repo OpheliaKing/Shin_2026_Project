@@ -17,10 +17,6 @@ namespace Shin
         [SerializeField]
         private CombatHitPhaseWindow[] _hitWindows = Array.Empty<CombatHitPhaseWindow>();
 
-        [Range(0f, 1f)]
-        [SerializeField]
-        private float _attackCancelTime;
-
         private CharacterBase _owner;
         private string _resolvedDisplayName;
         private bool[] _hitWindowFired;
@@ -76,6 +72,7 @@ namespace Shin
 
         public override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
+            Debug.Log($"OnCombatAnimationPlayEnded");
             if (_owner != null)
             {
                 if (!_playStartedNotified)
