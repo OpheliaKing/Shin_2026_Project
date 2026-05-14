@@ -36,6 +36,11 @@ namespace Shin
 
         public void SetMoveAnimationByInputDirection()
         {
+            if (!CharacterState.IsMoveAble())
+            {
+                return;
+            }
+
             float movementMaxValue = GetMovementAnimationMaxValue();
 
             Vector2 inputDirection = IntendedMoveDirection;

@@ -17,5 +17,25 @@ namespace Shin
                     return true;
             }
         }
+
+        public static bool IsAttackAble(this CHARACTER_STATE state)
+        {
+            switch (state)
+            {
+                case CHARACTER_STATE.NONE:
+                case CHARACTER_STATE.DIE:
+                case CHARACTER_STATE.HIT:
+                case CHARACTER_STATE.MOVE:
+                case CHARACTER_STATE.MOVE_RUN:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+        
+        public static bool IsNullOrEmpty(this string str)
+        {
+            return string.IsNullOrEmpty(str);
+        }
     }
 }

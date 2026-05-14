@@ -34,6 +34,7 @@ namespace Shin
             if (Player != null)
             {
                 Debug.Log("OnClick_Left: ");
+                Player.AttackInput(INPUT_TYPE.LEFT_CLICK);
             }
         }
 
