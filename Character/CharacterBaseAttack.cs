@@ -47,41 +47,97 @@ namespace Shin
         private bool _hasQueuedComboInput;
         private INPUT_TYPE _queuedComboInput;
 
-        public void AttackInput(INPUT_TYPE inputType)
+        private bool _isZoomState;
+
+        protected bool IsZoomState
+        {
+            get => _isZoomState;
+            set
+            {
+                if (_isZoomState == value)
+                {
+                    return;
+                }
+
+                _isZoomState = value;
+                ZoomStateChange();
+            }
+        }
+
+        public void AttackInput(INPUT_TYPE inputType, bool isPressed)
         {
             if (!CharacterState.IsAttackAble())
             {
                 return;
             }
 
-            if (_currentAttackTid.IsNullOrEmpty())
+            bool isAttackTid = _inputType.TryGetValue(inputType, out string attackTid);
+
+            var inputAttackData = FindAttackData(attackTid);
+            if (inputAttackData == null)
             {
-                if (_inputType.TryGetValue(inputType, out string attackTid))
+                return;
+            }
+
+            if (isPressed)
+            {
+                switch (inputAttackData.AttackType)
                 {
-                    Attack(attackTid);
+                    case ATTACK_TYPE.MELEE:
+                        if (_currentAttackTid.IsNullOrEmpty())
+                        {
+                            if (isAttackTid)
+                            {
+                                Attack(attackTid);
+                            }
+
+                            return;
+                        }
+
+                        if (!IsInComboBufferableState(CharacterState))
+                        {
+                            return;
+                        }
+
+                        AttackData currentAttack = FindAttackData(_currentAttackTid);
+
+                        if (currentAttack == null)
+                        {
+                            return;
+                        }
+
+
+                        if (currentAttack == null)
+                        {
+                            return;
+                        }
+
+                        if (!currentAttack.LinkedAttack.TryGetValue(inputType, out string nextTid) || string.IsNullOrEmpty(nextTid))
+                        {
+                            return;
+                        }
+                        _hasQueuedComboInput = true;
+                        break;
+                    case ATTACK_TYPE.PROJECTILE:
+                        break;
+                    case ATTACK_TYPE.HITSCAN:
+                        break;
+                    case ATTACK_TYPE.ZOOM:
+                        ActiveZoom(true);
+                        break;
                 }
 
-                return;
+                _queuedComboInput = inputType;
             }
-
-            if (!IsInComboBufferableState(CharacterState))
+            else
             {
-                return;
+                switch (inputAttackData.AttackType)
+                {
+                    case ATTACK_TYPE.ZOOM:
+                        ActiveZoom(false);
+                        break;
+                }
             }
-
-            AttackData currentAttack = FindAttackData(_currentAttackTid);
-            if (currentAttack == null)
-            {
-                return;
-            }
-
-            if (!currentAttack.LinkedAttack.TryGetValue(inputType, out string nextTid) || string.IsNullOrEmpty(nextTid))
-            {
-                return;
-            }
-
-            _queuedComboInput = inputType;
-            _hasQueuedComboInput = true;
         }
 
         public void Attack(string attackTid)
@@ -102,7 +158,7 @@ namespace Shin
             ChangeCharacterState(CHARACTER_STATE.ATTACK);
 
             attackData.AttackStartEvent?.Invoke();
-            _animator.CrossFade(attackData.AnimationName,0.2f);
+            _animator.CrossFade(attackData.AnimationName, 0.2f);
             _currentAttackTid = attackTid;
         }
 
@@ -264,6 +320,16 @@ namespace Shin
         public virtual void AttackToAnimation(string animatorStateDisplayName, int hitWindowIndex, float normalizedTime, string attackInfoDataTid)
         {
             Debug.Log($"AttackToAnimation: {animatorStateDisplayName}, {hitWindowIndex}, {normalizedTime}, {attackInfoDataTid}");
+        }
+
+        protected virtual void ActiveZoom(bool isActive)
+        {
+            IsZoomState = isActive;
+        }
+
+        protected virtual void ZoomStateChange()
+        {
+            Debug.Log($"ZoomStateChange: {IsZoomState}");
         }
     }
 

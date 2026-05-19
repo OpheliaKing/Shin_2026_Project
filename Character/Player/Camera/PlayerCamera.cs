@@ -29,14 +29,6 @@ namespace Shin
         private float _pitchDegrees;
         private float _yawDegrees;
 
-
-        #region CinemachineCamera
-
-        [SerializeField]
-        private SerializedDictionary<PLAYER_CAMERA_TYPE, CinemachineCamera> _cinemachineCameraSettings;
-
-        #endregion
-
         private void Awake()
         {
             Transform pivot = Pivot;

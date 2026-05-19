@@ -13,7 +13,7 @@ namespace Shin
 
         #endregion
 
-        
+
         private PlayerCamera _camera;
 
         public PlayerCamera Camera
@@ -51,6 +51,14 @@ namespace Shin
             if (Camera != null)
             {
                 Camera.MoveCamera(input);
+            }
+        }
+
+        public void ActiveCamera(PLAYER_CAMERA_TYPE cameraType, bool isActive)
+        {
+            if (_cinemachineCameraSettings.TryGetValue(cameraType, out CinemachineCamera camera))
+            {
+                camera.gameObject.SetActive(isActive);
             }
         }
     }

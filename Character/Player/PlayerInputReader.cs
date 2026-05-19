@@ -33,14 +33,20 @@ namespace Shin
         {
             if (Player != null)
             {
-                Debug.Log("OnClick_Left: ");
-                Player.AttackInput(INPUT_TYPE.LEFT_CLICK);
+                var ispressed = value.Get<float>() > 0f;
+                Debug.Log("OnClick_Left: " + ispressed);
+                Player.AttackInput(INPUT_TYPE.LEFT_CLICK, ispressed);
             }
         }
 
         public void OnClick_Right(InputValue value)
         {
-
+            if (Player != null)
+            {
+                var ispressed = value.Get<float>() > 0f;
+                Debug.Log("OnClick_Right: " + ispressed);
+                Player.AttackInput(INPUT_TYPE.RIGHT_CLICK, ispressed);
+            }
         }
 
         public void OnShift_Left(InputValue value)
