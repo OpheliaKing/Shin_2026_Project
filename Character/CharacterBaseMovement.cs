@@ -77,6 +77,25 @@ namespace Shin
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, t);
         }
 
+        /// <summary>
+        /// look 입력량에 따라 지정 축 기준으로 Transform을 회전시킵니다.
+        /// </summary>
+        /// <param name="target">회전 대상. null이면 this.transform.</param>
+        /// <param name="inputDelta">해당 축에 매핑된 입력량(예: 마우스 X → input.x).</param>
+        /// <param name="rotationAxis">회전 축(월드/로컬은 <paramref name="relativeTo"/> 참고).</param>
+        /// <param name="degreesPerInputUnit">입력 1당 회전 각도(도).</param>
+        /// <param name="relativeTo">회전 기준 좌표계.</param>
+        protected void RotateByLookInput(Transform target, float inputDelta, Vector3 rotationAxis, float degreesPerInputUnit, Space relativeTo = Space.World)
+        {
+            Transform rotateTarget = target != null ? target : transform;
+            if (Mathf.Abs(inputDelta) < 1e-8f || rotationAxis.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            rotateTarget.Rotate(rotationAxis.normalized, inputDelta * degreesPerInputUnit, relativeTo);
+        }
+
         public void SetMovementState(MOVEMENT_STATE state)
         {
             _movementState = state;

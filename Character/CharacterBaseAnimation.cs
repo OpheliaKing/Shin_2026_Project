@@ -6,6 +6,7 @@ namespace Shin
     {
         private const string ANIM_PARAM_MOVE_X = "MoveX";
         private const string ANIM_PARAM_MOVE_Y = "MoveY";
+        protected const string ANIM_PARAM_UPPER_Y = "UpperY";
 
         [SerializeField, Min(0f)]
         private float _moveAnimationLerpSpeed = 12f;
@@ -67,6 +68,11 @@ namespace Shin
                 MOVEMENT_STATE.DASH => 3f,
                 _ => 1f,
             };
+        }
+
+        public void SetWeight(string name, float weight)
+        {
+            Animator.SetLayerWeight(Animator.GetLayerIndex(name), weight);
         }
     }
 }

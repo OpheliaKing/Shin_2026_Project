@@ -20,9 +20,9 @@ namespace Shin
             SetIntendedMoveDirection(input);
 
             // 회전은 항상 카메라가 보는 방향(Yaw) 기준
-            if (input.sqrMagnitude >= 1e-8f && Camera != null)
+            if (input.sqrMagnitude >= 1e-8f && CurrentFocusCamera != null)
             {
-                Vector3 cameraForward = Camera.transform.forward;
+                Vector3 cameraForward = CurrentFocusCamera.transform.forward;
                 cameraForward.y = 0f;
                 if (cameraForward.sqrMagnitude >= 1e-8f)
                 {
@@ -41,10 +41,10 @@ namespace Shin
                 return Vector2.zero;
             }
 
-            if (Camera != null)
+            if (CurrentFocusCamera != null)
             {
-                Vector3 cameraForward = Camera.transform.forward;
-                Vector3 cameraRight = Camera.transform.right;
+                Vector3 cameraForward = CurrentFocusCamera.transform.forward;
+                Vector3 cameraRight = CurrentFocusCamera.transform.right;
                 cameraForward.y = 0f;
                 cameraRight.y = 0f;
                 cameraForward.Normalize();

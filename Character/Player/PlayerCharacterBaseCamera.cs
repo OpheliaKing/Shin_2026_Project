@@ -10,47 +10,75 @@ namespace Shin
 
         [SerializeField]
         private SerializedDictionary<PLAYER_CAMERA_TYPE, CinemachineCamera> _cinemachineCameraSettings;
+        private PlayerCamera _defaultFocusCamera;
+        protected PlayerCamera DefaultFocusCamera
+        {
+            get
+            {
+                if( _defaultFocusCamera == null)
+                {
+                    _defaultFocusCamera = Camera.main.GetComponent<PlayerCamera>();
+                }
+                return _defaultFocusCamera;
+            }
+        }
+
 
         #endregion
 
 
-        private PlayerCamera _camera;
+        private PlayerCamera _currentFocusCamera;
 
-        public PlayerCamera Camera
+        public PlayerCamera CurrentFocusCamera
         {
             get
             {
-                if (_camera == null)
+                if (_currentFocusCamera == null)
                 {
-                    _camera = GetComponentInChildren<PlayerCamera>();
+                    _currentFocusCamera = GetComponentInChildren<PlayerCamera>();
                 }
-                return _camera;
+                return _currentFocusCamera;
             }
         }
 
         private void CameraInit()
         {
-            _camera = GetComponentInChildren<PlayerCamera>();
-            if (_camera == null)
+            _currentFocusCamera = DefaultFocusCamera;
+            if (_currentFocusCamera == null)
             {
                 Debug.Log("Not Found PlayerCamera!!!");
             }
 
-            var cameraParent = GetComponentInChildren<TargetFollowObject>();
-            if (cameraParent == null)
+            var defaultCameraParent = GetComponentInChildren<TargetFollowObject>();
+            if (defaultCameraParent == null)
             {
                 Debug.Log("Not Found TargetFollowObject!!!");
             }
 
-            cameraParent.SetTarget(transform);
-            cameraParent.transform.parent = null;
+            defaultCameraParent.SetTarget(transform);
+            defaultCameraParent.transform.parent = null;
         }
 
         public void MoveCamera(Vector2 input)
         {
-            if (Camera != null)
+            if (CurrentFocusCamera != null)
             {
-                Camera.MoveCamera(input);
+                if (CurrentFocusCamera.GetPivotType() == PLAYER_CAMERA_ROTATE_TYPE.CHARACTER)
+                {
+                    // 캐릭터 Y축 회전 (상하 기울임은 애니메이션 처리, 카메라는 고정)
+                    RotateByLookInput(
+                        transform,
+                        input.x,
+                        Vector3.up,
+                        CurrentFocusCamera.HorizontalSensitivity);
+
+                    CurrentFocusCamera.ApplyVerticalLookInput(input.y);
+                    SetAnimatorFloat(ANIM_PARAM_UPPER_Y, CurrentFocusCamera.GetUpperYAnimationValue()*-1);
+                }
+                else
+                {
+                    CurrentFocusCamera.MoveCamera(input);
+                }
             }
         }
 
@@ -59,7 +87,25 @@ namespace Shin
             if (_cinemachineCameraSettings.TryGetValue(cameraType, out CinemachineCamera camera))
             {
                 camera.gameObject.SetActive(isActive);
+
+                if (isActive)
+                {
+                    PlayerCamera playerCamera = camera.GetComponent<PlayerCamera>();
+                    if (playerCamera != null)
+                    {
+                        SetCurrentFocusCamera(playerCamera);
+                    }
+                }
+                else
+                {
+                    SetCurrentFocusCamera(DefaultFocusCamera);
+                }
             }
+        }
+
+        public void SetCurrentFocusCamera(PlayerCamera camera)
+        {
+            _currentFocusCamera = camera;
         }
     }
 }

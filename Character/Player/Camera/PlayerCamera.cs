@@ -16,11 +16,20 @@ namespace Shin
             {
                 if (_pivot == null)
                 {
-                    _pivot = transform.parent;
+                    switch (_pivotType)
+                    {
+                        case PLAYER_CAMERA_ROTATE_TYPE.ONESELF:
+                            _pivot = transform;
+                            break;
+                        case PLAYER_CAMERA_ROTATE_TYPE.PARENT:
+                            _pivot = transform.parent;
+                            break;
+                    }
                 }
                 return _pivot;
             }
         }
+        [SerializeField] private PLAYER_CAMERA_ROTATE_TYPE _pivotType = PLAYER_CAMERA_ROTATE_TYPE.ONESELF;
         [SerializeField] private float _horizontalSensitivity = 0.15f;
         [SerializeField] private float _verticalSensitivity = 0.15f;
         [SerializeField, Range(-89f, 89f)] private float _minPitch = -80f;
@@ -82,6 +91,43 @@ namespace Shin
 
             return angle;
         }
+
+        public PLAYER_CAMERA_ROTATE_TYPE GetPivotType()
+        {
+            return _pivotType;
+        }
+
+        public float HorizontalSensitivity => _horizontalSensitivity;
+        public float VerticalSensitivity => _verticalSensitivity;
+        public float MinPitch => _minPitch;
+        public float MaxPitch => _maxPitch;
+        public float PitchDegrees => _pitchDegrees;
+
+        /// <summary>캐릭터 애니메이션용 수직 시선만 갱신합니다(피봇 회전 없음).</summary>
+        public void ApplyVerticalLookInput(float lookDeltaY)
+        {
+            if (Mathf.Abs(lookDeltaY) < 1e-8f)
+            {
+                return;
+            }
+
+            _pitchDegrees -= lookDeltaY * _verticalSensitivity;
+            _pitchDegrees = Mathf.Clamp(_pitchDegrees, _minPitch, _maxPitch);
+        }
+
+        /// <summary>
+        /// 현재 피치를 UpperY 애니메이션 값으로 변환합니다. MaxPitch(위) = 1, MinPitch(아래) = -1.
+        /// </summary>
+        public float GetUpperYAnimationValue()
+        {
+            if (Mathf.Approximately(_maxPitch, _minPitch))
+            {
+                return 0f;
+            }
+
+            float t = Mathf.InverseLerp(_minPitch, _maxPitch, _pitchDegrees);
+            return Mathf.Lerp(-1f, 1f, t);
+        }
     }
 }
 
@@ -91,4 +137,10 @@ public enum PLAYER_CAMERA_TYPE
     SHOOT_ZOOM
 }
 
-
+public enum PLAYER_CAMERA_ROTATE_TYPE
+{
+    NONE,
+    ONESELF,
+    PARENT,
+    CHARACTER,
+}
