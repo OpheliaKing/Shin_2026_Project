@@ -146,6 +146,10 @@ namespace Shin
             _yawDegrees = NormalizeEulerDegrees(e.y);
         }
 
+        /// <summary>
+        /// RotateCameraX → Pitch(입력 y), RotateCameraY → Yaw(입력 x).
+        /// ApplyRotationToPivot는 x→Yaw, y→Pitch 이므로 플래그와 입력 축을 맞춥니다.
+        /// </summary>
         private static Vector2 FilterLookDelta(Vector2 lookDelta, PlayerCameraRotateCharacterData rotateData)
         {
             bool parentOnly = rotateData.RotateParent && !rotateData.RotateCameraX && !rotateData.RotateCameraY;
@@ -153,13 +157,13 @@ namespace Shin
             if (rotateData.RotateParent)
             {
                 return new Vector2(
-                    rotateData.RotateCameraX || parentOnly ? lookDelta.x : 0f,
-                    rotateData.RotateCameraY || parentOnly ? lookDelta.y : 0f);
+                    rotateData.RotateCameraY || parentOnly ? lookDelta.x : 0f,
+                    rotateData.RotateCameraX || parentOnly ? lookDelta.y : 0f);
             }
 
             return new Vector2(
-                rotateData.RotateCameraX ? lookDelta.x : 0f,
-                rotateData.RotateCameraY ? lookDelta.y : 0f);
+                rotateData.RotateCameraY ? lookDelta.x : 0f,
+                rotateData.RotateCameraX ? lookDelta.y : 0f);
         }
 
         private static float NormalizeEulerDegrees(float angle)
