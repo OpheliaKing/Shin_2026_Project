@@ -16,10 +16,8 @@ namespace Shin
         /// </summary>
         public void MoveFromCameraRelativeInput(Vector2 input)
         {
-            // 애니메이션은 입력 축 기준(전/후/좌/우)으로 처리
             SetIntendedMoveDirection(input);
 
-            // 회전은 항상 카메라가 보는 방향(Yaw) 기준
             if (input.sqrMagnitude >= 1e-8f && CurrentFocusCamera != null)
             {
                 Vector3 cameraForward = CurrentFocusCamera.transform.forward;
@@ -30,8 +28,7 @@ namespace Shin
                 }
             }
 
-            Vector2 worldMoveDirection = ToWorldHorizontalFromCameraRelativeInput(input);
-            Move(worldMoveDirection);
+            Move(ToWorldHorizontalFromCameraRelativeInput(input));
         }
 
         private Vector2 ToWorldHorizontalFromCameraRelativeInput(Vector2 input)

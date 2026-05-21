@@ -74,7 +74,8 @@ namespace Shin
 
                     CurrentFocusCamera.ApplyVerticalLookInput(input.y);
                     UpdateUpperYAnimationFromCameraPitch();
-                    //CurrentFocusCamera.MoveCamera(input);
+
+                    MoveFocusCameraByRotateCharacterData(input);
                 }
                 else
                 {
@@ -117,6 +118,22 @@ namespace Shin
             }
 
             SetAnimatorFloat(ANIM_PARAM_UPPER_Y, CurrentFocusCamera.GetUpperYAnimationValue());
+        }
+
+        private void MoveFocusCameraByRotateCharacterData(Vector2 input)
+        {
+            if (CurrentFocusCamera == null)
+            {
+                return;
+            }
+
+            PlayerCameraRotateCharacterData rotateData = CurrentFocusCamera.RotateCharacterData;
+            if (rotateData.IsEmpty())
+            {
+                return;
+            }
+
+            CurrentFocusCamera.MoveCamera(input, rotateData);
         }
     }
 }

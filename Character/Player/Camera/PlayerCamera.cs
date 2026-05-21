@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using AYellowpaper.SerializedCollections;
 using Unity.Cinemachine;
+using System;
 
 
 
@@ -35,6 +36,15 @@ namespace Shin
         [SerializeField, Range(-89f, 89f)] private float _minPitch = -80f;
         [SerializeField, Range(-89f, 89f)] private float _maxPitch = 80f;
 
+        [SerializeField] private PlayerCameraRotateCharacterData _rotateCharacterData;
+        public PlayerCameraRotateCharacterData RotateCharacterData
+        {
+            get
+            {
+                return _rotateCharacterData;
+            }
+        }
+
         private float _pitchDegrees;
         private float _yawDegrees;
 
@@ -55,7 +65,7 @@ namespace Shin
         }
 
         /// <summary>
-        /// 수평: 피봇이 월드 Y 기준 회전(Yaw). 수직: 피봇이 Yaw 이후 오른쪽 축 기준 회전(Pitch). 카메라 객체 로컬 X는 건드리지 않음.
+        /// 수평 입력 → Yaw(Y), 수직 입력 → Pitch(X).
         /// </summary>
         public void MoveCamera(Vector2 lookDelta)
         {
@@ -65,21 +75,91 @@ namespace Shin
             }
 
             Transform pivot = Pivot;
-            _pitchDegrees -= lookDelta.y * _verticalSensitivity;
-            _pitchDegrees = Mathf.Clamp(_pitchDegrees, _minPitch, _maxPitch);
-
             if (pivot != null)
             {
-                _yawDegrees += lookDelta.x * _horizontalSensitivity;
-                Quaternion yawQ = Quaternion.AngleAxis(_yawDegrees, Vector3.up);
-                Vector3 rightAxis = yawQ * Vector3.right;
-                Quaternion pitchQ = Quaternion.AngleAxis(_pitchDegrees, rightAxis);
-                pivot.rotation = pitchQ * yawQ;
+                ApplyRotationToPivot(pivot, lookDelta);
             }
             else
             {
-                transform.localRotation = Quaternion.Euler(_pitchDegrees, transform.localEulerAngles.y, transform.localEulerAngles.z);
+                ApplyRotationToPivot(transform, lookDelta);
             }
+        }
+
+        /// <summary>
+        /// <see cref="PlayerCameraRotateCharacterData.RotateParent"/>가 true이면 부모 Transform을 피봇으로 회전합니다.
+        /// </summary>
+        public void MoveCamera(Vector2 lookDelta, PlayerCameraRotateCharacterData rotateData)
+        {
+            Vector2 filteredLookDelta = FilterLookDelta(lookDelta, rotateData);
+            if (filteredLookDelta.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            if (rotateData.RotateParent)
+            {
+                Transform parent = transform.parent;
+                if (parent == null)
+                {
+                    return;
+                }
+
+                ApplyRotationToPivot(parent, filteredLookDelta);
+                return;
+            }
+
+            if (!rotateData.RotateCameraX && !rotateData.RotateCameraY)
+            {
+                return;
+            }
+
+            Transform pivot = Pivot;
+            if (pivot != null)
+            {
+                ApplyRotationToPivot(pivot, filteredLookDelta);
+            }
+            else
+            {
+                ApplyRotationToPivot(transform, filteredLookDelta);
+            }
+        }
+
+        /// <summary>수평 입력(x) → Yaw(Y), 수직 입력(y) → Pitch(X).</summary>
+        private void ApplyRotationToPivot(Transform pivot, Vector2 lookDelta)
+        {
+            SyncRotationStateFromPivot(pivot);
+
+            _pitchDegrees -= lookDelta.y * _verticalSensitivity;
+            _pitchDegrees = Mathf.Clamp(_pitchDegrees, _minPitch, _maxPitch);
+            _yawDegrees += lookDelta.x * _horizontalSensitivity;
+
+            Quaternion yawQ = Quaternion.AngleAxis(_yawDegrees, Vector3.up);
+            Vector3 rightAxis = yawQ * Vector3.right;
+            Quaternion pitchQ = Quaternion.AngleAxis(_pitchDegrees, rightAxis);
+            pivot.rotation = pitchQ * yawQ;
+        }
+
+        private void SyncRotationStateFromPivot(Transform pivot)
+        {
+            Vector3 e = pivot.eulerAngles;
+            _pitchDegrees = NormalizeEulerDegrees(e.x);
+            _yawDegrees = NormalizeEulerDegrees(e.y);
+        }
+
+        private static Vector2 FilterLookDelta(Vector2 lookDelta, PlayerCameraRotateCharacterData rotateData)
+        {
+            bool parentOnly = rotateData.RotateParent && !rotateData.RotateCameraX && !rotateData.RotateCameraY;
+
+            if (rotateData.RotateParent)
+            {
+                return new Vector2(
+                    rotateData.RotateCameraX || parentOnly ? lookDelta.x : 0f,
+                    rotateData.RotateCameraY || parentOnly ? lookDelta.y : 0f);
+            }
+
+            return new Vector2(
+                rotateData.RotateCameraX ? lookDelta.x : 0f,
+                rotateData.RotateCameraY ? lookDelta.y : 0f);
         }
 
         private static float NormalizeEulerDegrees(float angle)
@@ -150,4 +230,22 @@ public enum PLAYER_CAMERA_ROTATE_TYPE
     ONESELF,
     PARENT,
     CHARACTER,
+}
+
+[Serializable]
+public struct PlayerCameraRotateCharacterData
+{
+    public bool RotateCameraX;
+    public bool RotateCameraY;
+    public bool RotateParent;
+
+    public bool IsEmpty()
+    {
+        return !RotateCameraX && !RotateCameraY && !RotateParent;
+    }
+}
+
+public enum PLAYER_CAMERA_ROTATE_TYPE_CHARACTER
+{
+
 }
