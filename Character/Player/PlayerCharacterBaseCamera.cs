@@ -73,7 +73,8 @@ namespace Shin
                         CurrentFocusCamera.HorizontalSensitivity);
 
                     CurrentFocusCamera.ApplyVerticalLookInput(input.y);
-                    SetAnimatorFloat(ANIM_PARAM_UPPER_Y, CurrentFocusCamera.GetUpperYAnimationValue()*-1);
+                    UpdateUpperYAnimationFromCameraPitch();
+                    //CurrentFocusCamera.MoveCamera(input);
                 }
                 else
                 {
@@ -106,6 +107,16 @@ namespace Shin
         public void SetCurrentFocusCamera(PlayerCamera camera)
         {
             _currentFocusCamera = camera;
+        }
+
+        private void UpdateUpperYAnimationFromCameraPitch()
+        {
+            if (CurrentFocusCamera == null)
+            {
+                return;
+            }
+
+            SetAnimatorFloat(ANIM_PARAM_UPPER_Y, CurrentFocusCamera.GetUpperYAnimationValue());
         }
     }
 }

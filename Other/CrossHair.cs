@@ -28,6 +28,7 @@ namespace Shin
 
         private void LateUpdate()
         {
+            return;
             if (!TryGetMouseScreenPosition(out Vector2 mouseScreenPosition))
             {
                 return;

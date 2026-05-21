@@ -103,6 +103,9 @@ namespace Shin
         public float MaxPitch => _maxPitch;
         public float PitchDegrees => _pitchDegrees;
 
+        /// <summary>수직 시선 각도(도). <see cref="_pitchDegrees"/>와 동일합니다.</summary>
+        public float RotateX => _pitchDegrees;
+
         /// <summary>캐릭터 애니메이션용 수직 시선만 갱신합니다(피봇 회전 없음).</summary>
         public void ApplyVerticalLookInput(float lookDeltaY)
         {
@@ -116,17 +119,21 @@ namespace Shin
         }
 
         /// <summary>
-        /// 현재 피치를 UpperY 애니메이션 값으로 변환합니다. MaxPitch(위) = 1, MinPitch(아래) = -1.
+        /// <see cref="RotateX"/>를 UpperY로 변환합니다. 90° → -1, -90° → 1, 0° → 0.
         /// </summary>
         public float GetUpperYAnimationValue()
         {
-            if (Mathf.Approximately(_maxPitch, _minPitch))
+            return PitchDegreesToUpperY(_pitchDegrees);
+        }
+
+        public static float PitchDegreesToUpperY(float pitchDegrees, float verticalLimitDegrees = 90f)
+        {
+            if (Mathf.Approximately(verticalLimitDegrees, 0f))
             {
                 return 0f;
             }
 
-            float t = Mathf.InverseLerp(_minPitch, _maxPitch, _pitchDegrees);
-            return Mathf.Lerp(-1f, 1f, t);
+            return Mathf.Clamp(-pitchDegrees / verticalLimitDegrees, -1f, 1f);
         }
     }
 }
