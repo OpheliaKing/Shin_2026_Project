@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Cinemachine;
 using UnityEngine;
 
 namespace Shin
@@ -27,6 +28,7 @@ namespace Shin
             }
 
             victim.ReceiveCombatDamage(attacker, attackInfo, damage);
+            TryShakeCameraOnPlayerAttack(attacker, attackInfo);
 
             Debug.Log(
                 $"[CombatManager.ApplyDamage] {attacker.name} -> {victim.name} | info={attackInfo.Tid} | damage={damage} | victimHp={victim.Health}");
@@ -89,6 +91,54 @@ namespace Shin
             }
 
             return true;
+        }
+
+        private static void TryShakeCameraOnPlayerAttack(CharacterBase attacker, AttackInfoData attackInfo)
+        {
+            if (!IsPlayerUnit(attacker) || attackInfo == null)
+            {
+                return;
+            }
+
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                return;
+            }
+
+            CinemachineBrain brain = mainCamera.GetComponent<CinemachineBrain>();
+            if (brain == null || brain.ActiveVirtualCamera == null)
+            {
+                return;
+            }
+
+            MonoBehaviour liveCameraBehaviour = brain.ActiveVirtualCamera as MonoBehaviour;
+            if (liveCameraBehaviour == null)
+            {
+                return;
+            }
+
+            GameObject liveCameraObject = liveCameraBehaviour.gameObject;
+            if (liveCameraObject.TryGetComponent(out CinemachineImpulseSource impulseSource))
+            {
+                if (liveCameraObject.TryGetComponent(out CinemachineImpulseListener impulseListener))
+                {
+                    impulseListener.Gain = attackInfo.CameraShakeGain;
+                }
+
+                impulseSource.GenerateImpulse();
+            }
+        }
+
+        private static bool IsPlayerUnit(CharacterBase attacker)
+        {
+            if (attacker == null)
+            {
+                return false;
+            }
+
+            return attacker.FriendlyType == CHARACTER_FRIENDLY_TYPE.PLAYER
+                || attacker.FriendlyType == CHARACTER_FRIENDLY_TYPE.PLAYER_FRIENDLY;
         }
     }
 }

@@ -519,6 +519,7 @@ namespace Shin
         public string Tid;
         public ATTACK_FRIENDLY_TYPE AttackFriendlyType = ATTACK_FRIENDLY_TYPE.ENEMY;
         public float DamageValue;
+        public float CameraShakeGain = 0.3f;
 
         //MELEE
         public Vector3 HitBoxSize;
