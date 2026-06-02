@@ -12,6 +12,9 @@ namespace Shin
         private float _rotationLerpSpeed = 14f;
 
         [SerializeField]
+        private LayerMask _movementObstructionMask = ~0;
+
+        [SerializeField]
         private SerializedDictionary<MOVEMENT_STATE, float> _movementSpeed = new SerializedDictionary<MOVEMENT_STATE, float>
         {
             { MOVEMENT_STATE.WALK, 5f },
@@ -20,27 +23,160 @@ namespace Shin
         };
 
         private MOVEMENT_STATE _movementState = MOVEMENT_STATE.WALK;
+        private Rigidbody _rigidbody;
+        private Vector3 _requestedWorldVelocity;
+
+        partial void InitMovement()
+        {
+            _rigidbody = GetComponent<Rigidbody>();
+        }
+
+        private void FixedUpdate()
+        {
+            ApplyRequestedMovement();
+        }
 
         /// <summary>
-        /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 캐릭터 위치를 갱신합니다.
+        /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청을 갱신합니다. 실제 위치 변경은 <see cref="FixedUpdate"/>에서 처리합니다.
         /// </summary>
         public void Move(Vector2 worldHorizontalDirection)
         {
             if (!CharacterState.IsMoveAble())
             {
+                _requestedWorldVelocity = Vector3.zero;
                 return;
             }
 
             if (worldHorizontalDirection.sqrMagnitude < 1e-8f)
             {
+                _requestedWorldVelocity = Vector3.zero;
                 ChangeCharacterState(CHARACTER_STATE.IDLE);
                 return;
             }
 
             ChangeCharacterState(CHARACTER_STATE.MOVE);
             Vector3 moveDirection = new Vector3(worldHorizontalDirection.x, 0f, worldHorizontalDirection.y).normalized;
-            transform.position += moveDirection * GetMovementSpeed() * Time.deltaTime;
+            _requestedWorldVelocity = moveDirection * GetMovementSpeed();
             RotateTowards(GetCurrentLookDirectionOr(moveDirection));
+        }
+
+        private void ApplyRequestedMovement()
+        {
+            if (_requestedWorldVelocity.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            Vector3 delta = _requestedWorldVelocity * Time.fixedDeltaTime;
+
+            if (_rigidbody != null)
+            {
+                Vector3 resolvedDelta = ResolveMovementDelta(delta);
+                Vector3 nextPosition = _rigidbody.position + resolvedDelta;
+
+                if (!_rigidbody.isKinematic)
+                {
+                    nextPosition.y = _rigidbody.position.y;
+                }
+
+                _rigidbody.MovePosition(nextPosition);
+
+                if (!_rigidbody.isKinematic)
+                {
+                    Vector3 velocity = _rigidbody.linearVelocity;
+                    velocity.x = 0f;
+                    velocity.z = 0f;
+                    _rigidbody.linearVelocity = velocity;
+                }
+            }
+            else
+            {
+                transform.position += delta;
+            }
+        }
+
+        private Vector3 ResolveMovementDelta(Vector3 delta)
+        {
+            if (delta.sqrMagnitude < 1e-8f)
+            {
+                return delta;
+            }
+
+            if (!TryGetCapsuleCastParameters(out Vector3 bottom, out Vector3 top, out float radius))
+            {
+                return delta;
+            }
+
+            const float skin = 0.02f;
+            Vector3 direction = delta.normalized;
+            float distance = delta.magnitude;
+
+            if (!Physics.CapsuleCast(
+                    bottom,
+                    top,
+                    radius,
+                    direction,
+                    out RaycastHit hit,
+                    distance + skin,
+                    _movementObstructionMask,
+                    QueryTriggerInteraction.Ignore))
+            {
+                return delta;
+            }
+
+            Vector3 safeMove = direction * Mathf.Max(0f, hit.distance - skin);
+            Vector3 remaining = delta - safeMove;
+            if (remaining.sqrMagnitude < 1e-8f)
+            {
+                return safeMove;
+            }
+
+            Vector3 slide = Vector3.ProjectOnPlane(remaining, hit.normal);
+            if (slide.sqrMagnitude < 1e-8f)
+            {
+                return safeMove;
+            }
+
+            Vector3 slideOriginBottom = bottom + safeMove;
+            Vector3 slideOriginTop = top + safeMove;
+            if (Physics.CapsuleCast(
+                    slideOriginBottom,
+                    slideOriginTop,
+                    radius,
+                    slide.normalized,
+                    out RaycastHit slideHit,
+                    slide.magnitude + skin,
+                    _movementObstructionMask,
+                    QueryTriggerInteraction.Ignore))
+            {
+                slide = slide.normalized * Mathf.Max(0f, slideHit.distance - skin);
+            }
+
+            return safeMove + slide;
+        }
+
+        private bool TryGetCapsuleCastParameters(out Vector3 bottom, out Vector3 top, out float radius)
+        {
+            bottom = default;
+            top = default;
+            radius = 0f;
+
+            if (!TryGetComponent(out CapsuleCollider capsule))
+            {
+                return false;
+            }
+
+            Transform capsuleTransform = capsule.transform;
+            Vector3 center = capsuleTransform.TransformPoint(capsule.center);
+            float scaledRadius = capsule.radius * Mathf.Max(capsuleTransform.lossyScale.x, capsuleTransform.lossyScale.z);
+            float scaledHeight = capsule.height * capsuleTransform.lossyScale.y;
+            float halfHeight = Mathf.Max(scaledHeight * 0.5f - scaledRadius, 0f);
+
+            Vector3 up = capsuleTransform.up;
+            bottom = center - up * halfHeight;
+            top = center + up * halfHeight;
+            radius = scaledRadius;
+            return true;
         }
 
         /// <summary>

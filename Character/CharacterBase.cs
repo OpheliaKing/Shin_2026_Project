@@ -35,7 +35,10 @@ namespace Shin
         protected virtual void Init()
         {
             InitCombatHealth();
+            InitMovement();
         }
+
+        partial void InitMovement();
 
         protected bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
         {

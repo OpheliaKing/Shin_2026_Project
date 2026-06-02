@@ -7,6 +7,7 @@ namespace Shin
 
         protected override void Init()
         {
+            base.Init();
             CameraInit();
         }
         protected override void Update()
