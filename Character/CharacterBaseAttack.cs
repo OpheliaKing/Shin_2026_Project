@@ -7,6 +7,126 @@ namespace Shin
 {
     public partial class CharacterBase
     {
+        partial void InitCombatHealth();
+        partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState);
+
+        [Header("Combat")]
+        [SerializeField]
+        private int _maxHealth = 100;
+
+        private int _health;
+
+        public int Health => _health;
+        public int MaxHealth => _maxHealth;
+
+        partial void InitCombatHealth()
+        {
+            _maxHealth = Mathf.Max(1, _maxHealth);
+            _health = _maxHealth;
+        }
+
+        /// <summary><see cref="CombatManager.ApplyDamage"/>에서만 호출합니다.</summary>
+        internal void ReceiveCombatDamage(CharacterBase attacker, AttackInfoData attackInfo, int damageAmount)
+        {
+            if (damageAmount <= 0)
+            {
+                return;
+            }
+
+            _health = Mathf.Max(0, _health - damageAmount);
+            OnCombatDamaged(attacker, attackInfo, damageAmount);
+
+            Debug.Log($"ReceiveCombatDamage: {attacker.name} -> {name} | damageAmount={damageAmount} | health={_health}");
+
+            if (_health <= 0 && CharacterState != CHARACTER_STATE.DIE)
+            {
+                ChangeCharacterState(CHARACTER_STATE.DIE, true);
+            }
+        }
+
+        protected virtual void OnCombatDamaged(CharacterBase attacker, AttackInfoData attackInfo, int damageAmount)
+        {
+        }
+
+        [SerializeField]
+        private CHARACTER_FRIENDLY_TYPE _friendlyType = CHARACTER_FRIENDLY_TYPE.NONE;
+
+        public CHARACTER_FRIENDLY_TYPE FriendlyType => _friendlyType;
+
+        public bool IsAlly(CharacterBase other)
+        {
+            if (other == null || other == this)
+            {
+                return false;
+            }
+
+            if (_friendlyType == CHARACTER_FRIENDLY_TYPE.NEUTRAL || other._friendlyType == CHARACTER_FRIENDLY_TYPE.NEUTRAL)
+            {
+                return false;
+            }
+
+            if (IsPlayerSideFaction(_friendlyType) && IsPlayerSideFaction(other._friendlyType))
+            {
+                return true;
+            }
+
+            return _friendlyType == CHARACTER_FRIENDLY_TYPE.ENEMY && other._friendlyType == CHARACTER_FRIENDLY_TYPE.ENEMY;
+        }
+
+        public bool IsEnemy(CharacterBase other)
+        {
+            if (other == null || other == this)
+            {
+                return false;
+            }
+
+            if (_friendlyType == CHARACTER_FRIENDLY_TYPE.NEUTRAL || other._friendlyType == CHARACTER_FRIENDLY_TYPE.NEUTRAL)
+            {
+                return false;
+            }
+
+            bool selfPlayerSide = IsPlayerSideFaction(_friendlyType);
+            bool otherPlayerSide = IsPlayerSideFaction(other._friendlyType);
+            bool selfEnemySide = _friendlyType == CHARACTER_FRIENDLY_TYPE.ENEMY;
+            bool otherEnemySide = other._friendlyType == CHARACTER_FRIENDLY_TYPE.ENEMY;
+
+            return (selfPlayerSide && otherEnemySide) || (selfEnemySide && otherPlayerSide);
+        }
+
+        /// <summary>
+        /// <paramref name="attacker"/>의 공격 진영 설정(<see cref="ATTACK_FRIENDLY_TYPE"/>)에 따라 피격 가능한지 판별합니다.
+        /// <see cref="CHARACTER_FRIENDLY_TYPE.NEUTRAL"/>은 아군·적군 공격 모두에 맞습니다.
+        /// </summary>
+        public bool CanBeDamagedBy(CharacterBase attacker, ATTACK_FRIENDLY_TYPE attackFriendlyType)
+        {
+            if (attacker == null)
+            {
+                return false;
+            }
+
+            if (_friendlyType == CHARACTER_FRIENDLY_TYPE.NEUTRAL)
+            {
+                return true;
+            }
+
+            switch (attackFriendlyType)
+            {
+                case ATTACK_FRIENDLY_TYPE.FRIENDLY:
+                    return attacker.IsAlly(this);
+                case ATTACK_FRIENDLY_TYPE.ENEMY:
+                    return attacker.IsEnemy(this);
+                case ATTACK_FRIENDLY_TYPE.ALL:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsPlayerSideFaction(CHARACTER_FRIENDLY_TYPE type)
+        {
+            return type == CHARACTER_FRIENDLY_TYPE.PLAYER || type == CHARACTER_FRIENDLY_TYPE.PLAYER_FRIENDLY;
+        }
+
         [Header("Attack")]
         [SerializeField]
         protected SerializedDictionary<INPUT_TYPE, string> _inputType = new SerializedDictionary<INPUT_TYPE, string>();
@@ -124,6 +244,7 @@ namespace Shin
                         break;
                     case ATTACK_TYPE.ZOOM:
                         ActiveZoom(true);
+                        _currentAttackTid = attackTid;
                         break;
                 }
 
@@ -135,6 +256,7 @@ namespace Shin
                 {
                     case ATTACK_TYPE.ZOOM:
                         ActiveZoom(false);
+                        _currentAttackTid = "";
                         break;
                 }
             }
@@ -244,6 +366,16 @@ namespace Shin
             return Array.Find(_attackData, data => data.Tid == attackTid);
         }
 
+        public AttackInfoData FindAttackInfoData(string attackInfoDataTid)
+        {
+            if (_attackInfoData == null || string.IsNullOrEmpty(attackInfoDataTid))
+            {
+                return null;
+            }
+
+            return Array.Find(_attackInfoData, data => data.Tid == attackInfoDataTid);
+        }
+
         partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState)
         {
             if (currentState == CHARACTER_STATE.ATTACK || currentState == CHARACTER_STATE.ATTACK_MOVEABLE)
@@ -319,7 +451,21 @@ namespace Shin
         /// <param name="attackInfoDataTid"><see cref="CombatHitPhaseWindow.AttackInfoDataTid"/>에 설정한 값.</param>
         public virtual void AttackToAnimation(string animatorStateDisplayName, int hitWindowIndex, float normalizedTime, string attackInfoDataTid)
         {
-            Debug.Log($"AttackToAnimation: {animatorStateDisplayName}, {hitWindowIndex}, {normalizedTime}, {attackInfoDataTid}");
+            AttackInfoData attackInfo = FindAttackInfoData(attackInfoDataTid);
+            if (attackInfo == null)
+            {
+                Debug.LogWarning($"{name}: AttackInfoData not found for tid '{attackInfoDataTid}'");
+                return;
+            }
+
+            CombatManager combatManager = GameManager.Instance != null ? GameManager.Instance.CombatManager : null;
+            if (combatManager == null)
+            {
+                Debug.LogWarning($"{name}: CombatManager is not available.");
+                return;
+            }
+
+            combatManager.ProcessMeleeHitFromAttackInfo(this, attackInfo);
         }
 
         protected virtual void ActiveZoom(bool isActive)
@@ -370,6 +516,10 @@ namespace Shin
     [Serializable]
     public class AttackInfoData
     {
+        public string Tid;
+        public ATTACK_FRIENDLY_TYPE AttackFriendlyType = ATTACK_FRIENDLY_TYPE.ENEMY;
+        public float DamageValue;
+
         //MELEE
         public Vector3 HitBoxSize;
         public Vector3 HitBoxOffset;
@@ -378,5 +528,22 @@ namespace Shin
 
         //PROJECTILE
         public GameObject Projectile;
+    }
+
+    public enum ATTACK_FRIENDLY_TYPE
+    {
+        NONE,
+        FRIENDLY,
+        ENEMY,
+        ALL,
+    }
+
+    public enum CHARACTER_FRIENDLY_TYPE
+    {
+        NONE,
+        PLAYER,
+        PLAYER_FRIENDLY,
+        ENEMY,
+        NEUTRAL,
     }
 }

@@ -5,9 +5,6 @@ namespace Shin
 {
     public partial class CharacterBase : MonoBehaviour
     {
-        private int _health;
-        private int _maxHealth;
-
         private CHARACTER_STATE _previousCharacterState = CHARACTER_STATE.NONE;
         [SerializeField]
         private CHARACTER_STATE _characterState = CHARACTER_STATE.NONE;
@@ -29,7 +26,7 @@ namespace Shin
                 return _previousCharacterState;
             }
         }
-        
+
         protected virtual void Awake()
         {
             Init();
@@ -37,7 +34,7 @@ namespace Shin
 
         protected virtual void Init()
         {
-
+            InitCombatHealth();
         }
 
         protected bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
@@ -77,8 +74,6 @@ namespace Shin
         {
             OnExitState_AttackComboHook(currentState, nextState);
         }
-
-        partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState);
 
         protected virtual void Update()
         {
