@@ -72,11 +72,8 @@ namespace Shin
         private void FixedUpdate()
         {
             ApplyRequestedMovement();
-            ApplyAINavMeshPositionConstraint();
             ApplyPendingRotation();
         }
-
-        partial void ApplyAINavMeshPositionConstraint();
 
         /// <summary>
         /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청만 갱신합니다. 위치/회전 적용은 <see cref="FixedUpdate"/>에서 처리합니다.
@@ -112,9 +109,7 @@ namespace Shin
 
             if (_rigidbody != null)
             {
-                Vector3 resolvedDelta = CharacterAIState == CHARACTER_AI_STATE.AI
-                    ? ResolveAIDelta(delta)
-                    : ResolveMovementDelta(delta);
+                Vector3 resolvedDelta = ResolveMovementDelta(delta);
                 Vector3 nextPosition = _rigidbody.position + resolvedDelta;
                 _rigidbody.MovePosition(nextPosition);
             }
@@ -153,6 +148,11 @@ namespace Shin
 
         private Vector3 ResolveMovementDelta(Vector3 delta)
         {
+            return ResolveMovementDelta(delta, _movementObstructionMask);
+        }
+
+        private Vector3 ResolveMovementDelta(Vector3 delta, LayerMask obstructionMask)
+        {
             if (delta.sqrMagnitude < 1e-8f)
             {
                 return delta;
@@ -167,7 +167,7 @@ namespace Shin
             Vector3 direction = delta.normalized;
             float distance = delta.magnitude;
 
-            if (!TryGetNearestObstructionHit(bottom, top, radius, feetY, direction, distance + skin, out RaycastHit hit))
+            if (!TryGetNearestObstructionHit(bottom, top, radius, feetY, direction, distance + skin, obstructionMask, out RaycastHit hit))
             {
                 return delta;
             }
@@ -197,6 +197,7 @@ namespace Shin
                     feetY,
                     slide.normalized,
                     slide.magnitude + skin,
+                    obstructionMask,
                     out RaycastHit slideHit))
             {
                 slide = slide.normalized * Mathf.Max(0f, slideHit.distance - skin);
@@ -212,6 +213,7 @@ namespace Shin
             float feetY,
             Vector3 direction,
             float maxDistance,
+            LayerMask obstructionMask,
             out RaycastHit nearestHit)
         {
             nearestHit = default;
@@ -224,7 +226,7 @@ namespace Shin
                 radius,
                 direction,
                 maxDistance,
-                _movementObstructionMask,
+                obstructionMask,
                 QueryTriggerInteraction.Ignore);
 
             for (int i = 0; i < hits.Length; i++)

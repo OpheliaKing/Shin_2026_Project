@@ -13,10 +13,16 @@ namespace Shin
         private float _enemyChaseStopDistance = 1.5f;
 
         [SerializeField, Min(0.1f)]
-        private float _navMeshSampleRadius = 4f;
+        [Tooltip("NavMesh 경로 계산 시 시작/목표 위치를 메시 위로 맞출 검색 반경입니다.")]
+        private float _navMeshPathSampleRadius = 4f;
 
         [SerializeField, Min(0.05f)]
-        private float _pathCornerReachDistance = 0.4f;
+        [Tooltip("현재 코너를 지나쳤다고 볼 거리. 작을수록 Bake 코너를 더 정확히 따릅니다.")]
+        private float _pathCornerReachDistance = 0.3f;
+
+        [SerializeField, Min(0.1f)]
+        [Tooltip("경로 선분 위를 따라 바라볼 거리. 커브에서 코너를 깎지 않도록 경로 위 점을 향합니다.")]
+        private float _pathLookAheadDistance = 1.2f;
 
         [SerializeField, Min(0.05f)]
         private float _navPathRecalculateInterval = 0.25f;
@@ -43,53 +49,6 @@ namespace Shin
             if (_characterAIState == CHARACTER_AI_STATE.AI)
             {
                 EnsureAIMovementState();
-                SnapPositionToNavMesh();
-            }
-        }
-
-        /// <summary>AI 이동량을 NavMesh 위로만 허용합니다. 벽 슬라이드로 메시 밖으로 나가는 것을 막습니다.</summary>
-        internal Vector3 ResolveAIDelta(Vector3 delta)
-        {
-            if (delta.sqrMagnitude < 1e-8f || _rigidbody == null)
-            {
-                return delta;
-            }
-
-            Vector3 from = _rigidbody.position;
-            Vector3 target = from + delta;
-            if (NavMesh.SamplePosition(target, out NavMeshHit hit, _navMeshSampleRadius, NavMesh.AllAreas))
-            {
-                Vector3 onMesh = hit.position;
-                onMesh.y = from.y;
-                return onMesh - from;
-            }
-
-            return Vector3.zero;
-        }
-
-        partial void ApplyAINavMeshPositionConstraint()
-        {
-            if (_characterAIState != CHARACTER_AI_STATE.AI)
-            {
-                return;
-            }
-
-            SnapPositionToNavMesh();
-        }
-
-        private void SnapPositionToNavMesh()
-        {
-            if (_rigidbody == null)
-            {
-                return;
-            }
-
-            Vector3 position = _rigidbody.position;
-            if (NavMesh.SamplePosition(position, out NavMeshHit hit, _navMeshSampleRadius, NavMesh.AllAreas))
-            {
-                Vector3 onMesh = hit.position;
-                onMesh.y = position.y;
-                _rigidbody.MovePosition(onMesh);
             }
         }
 
@@ -200,7 +159,7 @@ namespace Shin
                 _nextNavPathRecalculateTime = Time.time + _navPathRecalculateInterval;
             }
 
-            return TryGetDirectionToNextPathCorner(out direction);
+            return TryGetDirectionAlongNavMeshPath(out direction);
         }
 
         private bool IsNavPathUsable(Vector3 destination)
@@ -224,17 +183,17 @@ namespace Shin
                 _navMeshPath = new NavMeshPath();
             }
 
-            if (!NavMesh.SamplePosition(transform.position, out NavMeshHit fromHit, _navMeshSampleRadius, NavMesh.AllAreas))
+            if (!TrySampleNavMeshNear(transform.position, _navMeshPathSampleRadius, out Vector3 fromOnMesh))
             {
                 return false;
             }
 
-            if (!NavMesh.SamplePosition(destination, out NavMeshHit toHit, _navMeshSampleRadius, NavMesh.AllAreas))
+            if (!TrySampleNavMeshNear(destination, _navMeshPathSampleRadius, out Vector3 toOnMesh))
             {
                 return false;
             }
 
-            if (!NavMesh.CalculatePath(fromHit.position, toHit.position, NavMesh.AllAreas, _navMeshPath))
+            if (!NavMesh.CalculatePath(fromOnMesh, toOnMesh, NavMesh.AllAreas, _navMeshPath))
             {
                 return false;
             }
@@ -254,33 +213,173 @@ namespace Shin
             return true;
         }
 
-        private bool TryGetDirectionToNextPathCorner(out Vector3 direction)
+        /// <summary>
+        /// Bake 경로(코너 폴리라인) 위에 가장 가까운 점을 기준으로, 선분을 따라 look-ahead 지점을 향해 이동합니다.
+        /// </summary>
+        private bool TryGetDirectionAlongNavMeshPath(out Vector3 direction)
         {
             direction = Vector3.zero;
-
-            Vector3 currentPosition = transform.position;
-            if (NavMesh.SamplePosition(currentPosition, out NavMeshHit currentHit, _navMeshSampleRadius, NavMesh.AllAreas))
+            Vector3[] corners = _navMeshPath.corners;
+            if (corners == null || corners.Length < 2)
             {
-                currentPosition = currentHit.position;
+                return false;
             }
 
-            while (_navPathCornerIndex < _navMeshPath.corners.Length)
-            {
-                Vector3 corner = _navMeshPath.corners[_navPathCornerIndex];
-                Vector3 toCorner = corner - currentPosition;
-                toCorner.y = 0f;
+            float pathY = corners[0].y;
+            Vector3 flatPosition = transform.position;
+            flatPosition.y = pathY;
 
-                if (toCorner.sqrMagnitude <= _pathCornerReachDistance * _pathCornerReachDistance)
+            if (!TryGetClosestPointOnNavPath(flatPosition, corners, out Vector3 closestOnPath, out int segmentIndex))
+            {
+                return false;
+            }
+
+            AdvanceNavPathCornerIndex(flatPosition, corners, segmentIndex);
+
+            if (!TryGetPointAheadOnNavPath(closestOnPath, segmentIndex, corners, _pathLookAheadDistance, out Vector3 lookAheadPoint))
+            {
+                lookAheadPoint = corners[corners.Length - 1];
+                lookAheadPoint.y = pathY;
+            }
+
+            Vector3 toLookAhead = lookAheadPoint - flatPosition;
+            toLookAhead.y = 0f;
+            if (toLookAhead.sqrMagnitude < 1e-8f)
+            {
+                return false;
+            }
+
+            direction = toLookAhead.normalized;
+            return true;
+        }
+
+        private void AdvanceNavPathCornerIndex(Vector3 flatPosition, Vector3[] corners, int currentSegmentIndex)
+        {
+            _navPathCornerIndex = Mathf.Max(_navPathCornerIndex, currentSegmentIndex + 1);
+
+            float reachSqr = _pathCornerReachDistance * _pathCornerReachDistance;
+            while (_navPathCornerIndex < corners.Length)
+            {
+                Vector3 corner = corners[_navPathCornerIndex];
+                corner.y = flatPosition.y;
+                if ((corner - flatPosition).sqrMagnitude > reachSqr)
                 {
-                    _navPathCornerIndex++;
-                    continue;
+                    break;
                 }
 
-                direction = toCorner.normalized;
+                _navPathCornerIndex++;
+            }
+        }
+
+        private static bool TryGetClosestPointOnNavPath(
+            Vector3 flatPosition,
+            Vector3[] corners,
+            out Vector3 closestOnPath,
+            out int segmentIndex)
+        {
+            closestOnPath = flatPosition;
+            segmentIndex = 0;
+            float bestDistanceSqr = float.MaxValue;
+
+            for (int i = 0; i < corners.Length - 1; i++)
+            {
+                Vector3 segmentStart = corners[i];
+                Vector3 segmentEnd = corners[i + 1];
+                segmentStart.y = flatPosition.y;
+                segmentEnd.y = flatPosition.y;
+
+                Vector3 closestOnSegment = GetClosestPointOnSegment(segmentStart, segmentEnd, flatPosition, out _);
+                float distanceSqr = (closestOnSegment - flatPosition).sqrMagnitude;
+                if (distanceSqr < bestDistanceSqr)
+                {
+                    bestDistanceSqr = distanceSqr;
+                    closestOnPath = closestOnSegment;
+                    segmentIndex = i;
+                }
+            }
+
+            return bestDistanceSqr < float.MaxValue;
+        }
+
+        private static Vector3 GetClosestPointOnSegment(Vector3 segmentStart, Vector3 segmentEnd, Vector3 point, out float t)
+        {
+            Vector3 segment = segmentEnd - segmentStart;
+            float segmentLengthSqr = segment.sqrMagnitude;
+            if (segmentLengthSqr < 1e-8f)
+            {
+                t = 0f;
+                return segmentStart;
+            }
+
+            t = Mathf.Clamp01(Vector3.Dot(point - segmentStart, segment) / segmentLengthSqr);
+            return segmentStart + segment * t;
+        }
+
+        private static bool TryGetPointAheadOnNavPath(
+            Vector3 startOnPath,
+            int startSegmentIndex,
+            Vector3[] corners,
+            float lookAheadDistance,
+            out Vector3 pointAhead)
+        {
+            pointAhead = startOnPath;
+            if (lookAheadDistance <= 0f)
+            {
                 return true;
             }
 
-            return false;
+            float pathY = startOnPath.y;
+            float remaining = lookAheadDistance;
+
+            Vector3 segmentEnd = corners[startSegmentIndex + 1];
+            segmentEnd.y = pathY;
+            Vector3 segmentVector = segmentEnd - startOnPath;
+            float segmentLength = segmentVector.magnitude;
+
+            if (segmentLength >= remaining)
+            {
+                pointAhead = segmentLength < 1e-8f
+                    ? segmentEnd
+                    : startOnPath + segmentVector * (remaining / segmentLength);
+                return true;
+            }
+
+            remaining -= segmentLength;
+            for (int i = startSegmentIndex + 1; i < corners.Length - 1; i++)
+            {
+                Vector3 segStart = corners[i];
+                Vector3 segEnd = corners[i + 1];
+                segStart.y = pathY;
+                segEnd.y = pathY;
+                segmentVector = segEnd - segStart;
+                segmentLength = segmentVector.magnitude;
+
+                if (segmentLength >= remaining)
+                {
+                    pointAhead = segmentLength < 1e-8f
+                        ? segEnd
+                        : segStart + segmentVector * (remaining / segmentLength);
+                    return true;
+                }
+
+                remaining -= segmentLength;
+            }
+
+            pointAhead = corners[corners.Length - 1];
+            pointAhead.y = pathY;
+            return true;
+        }
+
+        private static bool TrySampleNavMeshNear(Vector3 worldPosition, float maxDistance, out Vector3 onMesh)
+        {
+            onMesh = worldPosition;
+            if (!NavMesh.SamplePosition(worldPosition, out NavMeshHit hit, maxDistance, NavMesh.AllAreas))
+            {
+                return false;
+            }
+
+            onMesh = hit.position;
+            return true;
         }
     }
 
