@@ -12,6 +12,7 @@ namespace Shin
         private float _rotationLerpSpeed = 14f;
 
         [SerializeField]
+        [Tooltip("수평 이동 시 막는 레이어. Ground 레이어는 Init 시 자동 제외됩니다.")]
         private LayerMask _movementObstructionMask = ~0;
 
         [SerializeField, Range(0f, 1f)]
@@ -43,6 +44,7 @@ namespace Shin
         {
             _rigidbody = GetComponent<Rigidbody>();
             _movementCapsule = GetComponent<CapsuleCollider>();
+            ApplyMovementObstructionMaskExcludingGround();
 
             if (_rigidbody == null)
             {
@@ -56,11 +58,25 @@ namespace Shin
             _rigidbody.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
 
+        private void ApplyMovementObstructionMaskExcludingGround()
+        {
+            int groundLayer = LayerMask.NameToLayer("Ground");
+            if (groundLayer < 0)
+            {
+                return;
+            }
+
+            _movementObstructionMask &= ~(1 << groundLayer);
+        }
+
         private void FixedUpdate()
         {
             ApplyRequestedMovement();
+            ApplyAINavMeshPositionConstraint();
             ApplyPendingRotation();
         }
+
+        partial void ApplyAINavMeshPositionConstraint();
 
         /// <summary>
         /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청만 갱신합니다. 위치/회전 적용은 <see cref="FixedUpdate"/>에서 처리합니다.
@@ -96,7 +112,9 @@ namespace Shin
 
             if (_rigidbody != null)
             {
-                Vector3 resolvedDelta = ResolveMovementDelta(delta);
+                Vector3 resolvedDelta = CharacterAIState == CHARACTER_AI_STATE.AI
+                    ? ResolveAIDelta(delta)
+                    : ResolveMovementDelta(delta);
                 Vector3 nextPosition = _rigidbody.position + resolvedDelta;
                 _rigidbody.MovePosition(nextPosition);
             }

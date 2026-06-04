@@ -36,9 +36,11 @@ namespace Shin
         {
             InitCombatHealth();
             InitMovement();
+            InitAI();
         }
 
         partial void InitMovement();
+        partial void InitAI();
 
         protected bool ChangeCharacterState(CHARACTER_STATE nextState, bool forceChange = false)
         {
@@ -80,8 +82,11 @@ namespace Shin
 
         protected virtual void Update()
         {
+            UpdateCharacterAI();
             SetMoveAnimationByInputDirection();
         }
+
+        partial void UpdateCharacterAI();
     }
 
 

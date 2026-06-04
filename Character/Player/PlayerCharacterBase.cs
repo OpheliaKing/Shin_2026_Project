@@ -9,7 +9,9 @@ namespace Shin
         {
             base.Init();
             CameraInit();
+            EnsureDefaultPlayerAIState();
         }
+
         protected override void Update()
         {
             base.Update();
