@@ -14,6 +14,18 @@ namespace Shin
         [SerializeField]
         private LayerMask _movementObstructionMask = ~0;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("이 값보다 위를 향한 표면(바닥)은 수평 이동 막힘 판정에서 제외합니다.")]
+        private float _floorNormalThreshold = 0.35f;
+
+        [SerializeField, Min(0f)]
+        [Tooltip("수평 이동 검사용 캡슐 캐스트 바닥을 올립니다. MeshCollider 바닥에 걸려 이동이 막힐 때 조절합니다.")]
+        private float _obstructionCastBottomLift = 0.2f;
+
+        [SerializeField, Min(0f)]
+        [Tooltip("발 높이 근처에서 맞은 충돌은 바닥으로 간주합니다. (MeshCollider 삼각형 노멀 보정)")]
+        private float _floorContactHeightTolerance = 0.25f;
+
         [SerializeField]
         private SerializedDictionary<MOVEMENT_STATE, float> _movementSpeed = new SerializedDictionary<MOVEMENT_STATE, float>
         {
@@ -24,20 +36,34 @@ namespace Shin
 
         private MOVEMENT_STATE _movementState = MOVEMENT_STATE.WALK;
         private Rigidbody _rigidbody;
+        private CapsuleCollider _movementCapsule;
         private Vector3 _requestedWorldVelocity;
 
         partial void InitMovement()
         {
             _rigidbody = GetComponent<Rigidbody>();
+            _movementCapsule = GetComponent<CapsuleCollider>();
+
+            if (_rigidbody == null)
+            {
+                return;
+            }
+
+            _rigidbody.isKinematic = true;
+            _rigidbody.useGravity = false;
+            _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            _rigidbody.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
 
         private void FixedUpdate()
         {
             ApplyRequestedMovement();
+            ApplyPendingRotation();
         }
 
         /// <summary>
-        /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청을 갱신합니다. 실제 위치 변경은 <see cref="FixedUpdate"/>에서 처리합니다.
+        /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청만 갱신합니다. 위치/회전 적용은 <see cref="FixedUpdate"/>에서 처리합니다.
         /// </summary>
         public void Move(Vector2 worldHorizontalDirection)
         {
@@ -57,7 +83,6 @@ namespace Shin
             ChangeCharacterState(CHARACTER_STATE.MOVE);
             Vector3 moveDirection = new Vector3(worldHorizontalDirection.x, 0f, worldHorizontalDirection.y).normalized;
             _requestedWorldVelocity = moveDirection * GetMovementSpeed();
-            RotateTowards(GetCurrentLookDirectionOr(moveDirection));
         }
 
         private void ApplyRequestedMovement()
@@ -73,25 +98,38 @@ namespace Shin
             {
                 Vector3 resolvedDelta = ResolveMovementDelta(delta);
                 Vector3 nextPosition = _rigidbody.position + resolvedDelta;
-
-                if (!_rigidbody.isKinematic)
-                {
-                    nextPosition.y = _rigidbody.position.y;
-                }
-
                 _rigidbody.MovePosition(nextPosition);
-
-                if (!_rigidbody.isKinematic)
-                {
-                    Vector3 velocity = _rigidbody.linearVelocity;
-                    velocity.x = 0f;
-                    velocity.z = 0f;
-                    _rigidbody.linearVelocity = velocity;
-                }
             }
             else
             {
                 transform.position += delta;
+            }
+        }
+
+        private void ApplyPendingRotation()
+        {
+            Vector3 lookDirection = IntendedLookDirection;
+            if (lookDirection.sqrMagnitude < 1e-8f && _requestedWorldVelocity.sqrMagnitude >= 1e-8f)
+            {
+                lookDirection = _requestedWorldVelocity.normalized;
+            }
+
+            if (lookDirection.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            Quaternion targetRotation = Quaternion.LookRotation(lookDirection, Vector3.up);
+            float t = Mathf.Clamp01(Time.fixedDeltaTime * _rotationLerpSpeed);
+            Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetRotation, t);
+
+            if (_rigidbody != null)
+            {
+                _rigidbody.MoveRotation(newRotation);
+            }
+            else
+            {
+                transform.rotation = newRotation;
             }
         }
 
@@ -102,7 +140,7 @@ namespace Shin
                 return delta;
             }
 
-            if (!TryGetCapsuleCastParameters(out Vector3 bottom, out Vector3 top, out float radius))
+            if (!TryGetObstructionCastParameters(out Vector3 bottom, out Vector3 top, out float radius, out float feetY))
             {
                 return delta;
             }
@@ -111,15 +149,7 @@ namespace Shin
             Vector3 direction = delta.normalized;
             float distance = delta.magnitude;
 
-            if (!Physics.CapsuleCast(
-                    bottom,
-                    top,
-                    radius,
-                    direction,
-                    out RaycastHit hit,
-                    distance + skin,
-                    _movementObstructionMask,
-                    QueryTriggerInteraction.Ignore))
+            if (!TryGetNearestObstructionHit(bottom, top, radius, feetY, direction, distance + skin, out RaycastHit hit))
             {
                 return delta;
             }
@@ -132,22 +162,24 @@ namespace Shin
             }
 
             Vector3 slide = Vector3.ProjectOnPlane(remaining, hit.normal);
+            slide.y = 0f;
             if (slide.sqrMagnitude < 1e-8f)
             {
                 return safeMove;
             }
 
+            slide = slide.normalized * slide.magnitude;
             Vector3 slideOriginBottom = bottom + safeMove;
             Vector3 slideOriginTop = top + safeMove;
-            if (Physics.CapsuleCast(
+
+            if (TryGetNearestObstructionHit(
                     slideOriginBottom,
                     slideOriginTop,
                     radius,
+                    feetY,
                     slide.normalized,
-                    out RaycastHit slideHit,
                     slide.magnitude + skin,
-                    _movementObstructionMask,
-                    QueryTriggerInteraction.Ignore))
+                    out RaycastHit slideHit))
             {
                 slide = slide.normalized * Mathf.Max(0f, slideHit.distance - skin);
             }
@@ -155,13 +187,96 @@ namespace Shin
             return safeMove + slide;
         }
 
-        private bool TryGetCapsuleCastParameters(out Vector3 bottom, out Vector3 top, out float radius)
+        private bool TryGetNearestObstructionHit(
+            Vector3 bottom,
+            Vector3 top,
+            float radius,
+            float feetY,
+            Vector3 direction,
+            float maxDistance,
+            out RaycastHit nearestHit)
+        {
+            nearestHit = default;
+            float nearestDistance = float.MaxValue;
+            bool found = false;
+
+            RaycastHit[] hits = Physics.CapsuleCastAll(
+                bottom,
+                top,
+                radius,
+                direction,
+                maxDistance,
+                _movementObstructionMask,
+                QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (!IsMovementObstructionHit(hits[i], feetY))
+                {
+                    continue;
+                }
+
+                if (hits[i].distance < nearestDistance)
+                {
+                    nearestDistance = hits[i].distance;
+                    nearestHit = hits[i];
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        private bool IsMovementObstructionHit(RaycastHit hit, float feetY)
+        {
+            if (hit.collider == null)
+            {
+                return false;
+            }
+
+            Transform hitTransform = hit.collider.transform;
+            if (hitTransform == transform || hitTransform.IsChildOf(transform))
+            {
+                return false;
+            }
+
+            if (IsFloorContact(hit, feetY))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsFloorContact(RaycastHit hit, float feetY)
+        {
+            if (hit.normal.y > _floorNormalThreshold)
+            {
+                return true;
+            }
+
+            if (hit.point.y <= feetY + _floorContactHeightTolerance && hit.normal.y > 0.15f)
+            {
+                return true;
+            }
+
+            if (hit.distance <= 0.01f && hit.normal.y >= 0f)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryGetObstructionCastParameters(out Vector3 bottom, out Vector3 top, out float radius, out float feetY)
         {
             bottom = default;
             top = default;
             radius = 0f;
+            feetY = 0f;
 
-            if (!TryGetComponent(out CapsuleCollider capsule))
+            CapsuleCollider capsule = _movementCapsule;
+            if (capsule == null)
             {
                 return false;
             }
@@ -173,8 +288,17 @@ namespace Shin
             float halfHeight = Mathf.Max(scaledHeight * 0.5f - scaledRadius, 0f);
 
             Vector3 up = capsuleTransform.up;
-            bottom = center - up * halfHeight;
+            Vector3 feet = center - up * halfHeight;
+            feetY = feet.y;
+            bottom = feet + up * _obstructionCastBottomLift;
             top = center + up * halfHeight;
+
+            float minCapsuleAxis = scaledRadius * 2f + 0.05f;
+            if (Vector3.Distance(bottom, top) < minCapsuleAxis)
+            {
+                top = bottom + up * minCapsuleAxis;
+            }
+
             radius = scaledRadius;
             return true;
         }
@@ -196,31 +320,9 @@ namespace Shin
             IntendedLookDirection = worldDirection.sqrMagnitude < 1e-8f ? Vector3.zero : worldDirection.normalized;
         }
 
-        private Vector3 GetCurrentLookDirectionOr(Vector3 fallbackWorldMoveDirection)
-        {
-            return IntendedLookDirection.sqrMagnitude < 1e-8f ? fallbackWorldMoveDirection : IntendedLookDirection;
-        }
-
-        private void RotateTowards(Vector3 worldMoveDirection)
-        {
-            if (worldMoveDirection.sqrMagnitude < 1e-8f)
-            {
-                return;
-            }
-
-            Quaternion targetRotation = Quaternion.LookRotation(worldMoveDirection, Vector3.up);
-            float t = Mathf.Clamp01(Time.deltaTime * _rotationLerpSpeed);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, t);
-        }
-
         /// <summary>
         /// look 입력량에 따라 지정 축 기준으로 Transform을 회전시킵니다.
         /// </summary>
-        /// <param name="target">회전 대상. null이면 this.transform.</param>
-        /// <param name="inputDelta">해당 축에 매핑된 입력량(예: 마우스 X → input.x).</param>
-        /// <param name="rotationAxis">회전 축(월드/로컬은 <paramref name="relativeTo"/> 참고).</param>
-        /// <param name="degreesPerInputUnit">입력 1당 회전 각도(도).</param>
-        /// <param name="relativeTo">회전 기준 좌표계.</param>
         protected void RotateByLookInput(Transform target, float inputDelta, Vector3 rotationAxis, float degreesPerInputUnit, Space relativeTo = Space.World)
         {
             Transform rotateTarget = target != null ? target : transform;
