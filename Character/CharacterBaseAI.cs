@@ -71,6 +71,12 @@ namespace Shin
         {
             EnsureAIMovementState();
 
+            if (IsInComboBufferableState(CharacterState))
+            {
+                Move(Vector2.zero);
+                return;
+            }
+
             CharacterBase player = FindPlayerTarget();
             if (player == null)
             {
@@ -78,6 +84,45 @@ namespace Shin
                 return;
             }
 
+            if (!CharacterState.IsAttackAble())
+            {
+                Move(Vector2.zero);
+                return;
+            }
+
+            if (!TryGetSelectedAIAttackData(out AttackData aiAttack))
+            {
+                UpdateEnemyChaseMovementFallback(player);
+                return;
+            }
+
+            Vector3 toPlayer = player.transform.position - transform.position;
+            toPlayer.y = 0f;
+            float attackDistanceSqr = aiAttack.AIAttackDistance * aiAttack.AIAttackDistance;
+
+            if (toPlayer.sqrMagnitude > attackDistanceSqr)
+            {
+                if (!TryGetNavMeshSteeringDirection(player.transform.position, out Vector3 steeringDirection))
+                {
+                    Move(Vector2.zero);
+                    return;
+                }
+
+                Move(new Vector2(steeringDirection.x, steeringDirection.z));
+                return;
+            }
+
+            if (toPlayer.sqrMagnitude > 1e-8f)
+            {
+                SetIntendedLookDirection(toPlayer.normalized);
+            }
+
+            Move(Vector2.zero);
+            Attack(aiAttack.Tid);
+        }
+
+        private void UpdateEnemyChaseMovementFallback(CharacterBase player)
+        {
             Vector3 toPlayer = player.transform.position - transform.position;
             toPlayer.y = 0f;
             if (toPlayer.sqrMagnitude <= _enemyChaseStopDistance * _enemyChaseStopDistance)

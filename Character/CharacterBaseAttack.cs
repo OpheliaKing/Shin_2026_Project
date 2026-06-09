@@ -199,6 +199,11 @@ namespace Shin
                 return;
             }
 
+            if (inputAttackData.AttackInputType == ATTACK_INPUT_TYPE.AI)
+            {
+                return;
+            }
+
             if (isPressed)
             {
                 switch (inputAttackData.AttackType)
@@ -221,13 +226,7 @@ namespace Shin
 
                         AttackData currentAttack = FindAttackData(_currentAttackTid);
 
-                        if (currentAttack == null)
-                        {
-                            return;
-                        }
-
-
-                        if (currentAttack == null)
+                        if (currentAttack == null || currentAttack.AttackInputType == ATTACK_INPUT_TYPE.AI)
                         {
                             return;
                         }
@@ -314,7 +313,7 @@ namespace Shin
             }
 
             AttackData currentAttack = FindAttackData(_currentAttackTid);
-            if (currentAttack == null)
+            if (currentAttack == null || currentAttack.AttackInputType == ATTACK_INPUT_TYPE.AI)
             {
                 _hasQueuedComboInput = false;
                 return;
@@ -423,9 +422,71 @@ namespace Shin
                 return;
             }
 
+            if (_characterAIState == CHARACTER_AI_STATE.AI && currentAttack.AttackInputType == ATTACK_INPUT_TYPE.AI)
+            {
+                if (TryGetFirstLinkedAttackTid(currentAttack, out string linkedTid))
+                {
+                    currentAttack.AttackEndEvent?.Invoke();
+                    Attack(linkedTid);
+                    return;
+                }
+            }
+
             currentAttack.AttackEndEvent?.Invoke();
             ClearAttackComboBufferAndCurrentTid();
             ChangeCharacterState(CHARACTER_STATE.IDLE);
+        }
+
+        private bool TryGetSelectedAIAttackData(out AttackData selected)
+        {
+            selected = null;
+            if (_attackData == null || _attackData.Length == 0)
+            {
+                return false;
+            }
+
+            float bestPriority = float.MinValue;
+            for (int i = 0; i < _attackData.Length; i++)
+            {
+                AttackData data = _attackData[i];
+                if (data == null || data.AttackInputType != ATTACK_INPUT_TYPE.AI)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(data.Tid))
+                {
+                    continue;
+                }
+
+                if (data.AttackPriority > bestPriority)
+                {
+                    bestPriority = data.AttackPriority;
+                    selected = data;
+                }
+            }
+
+            return selected != null;
+        }
+
+        private static bool TryGetFirstLinkedAttackTid(AttackData attackData, out string linkedTid)
+        {
+            linkedTid = null;
+            if (attackData?.LinkedAttack == null || attackData.LinkedAttack.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (System.Collections.Generic.KeyValuePair<INPUT_TYPE, string> pair in attackData.LinkedAttack)
+            {
+                if (!string.IsNullOrEmpty(pair.Value))
+                {
+                    linkedTid = pair.Value;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool DoesCombatAnimDisplayMatchAttack(AttackData attack, string animatorStateDisplayName)
@@ -489,6 +550,13 @@ namespace Shin
         E,
     }
 
+    public enum ATTACK_INPUT_TYPE
+    {
+        NONE,
+        INPUT,
+        AI,
+    }
+
     public enum ATTACK_TYPE
     {
         MELEE,
@@ -504,9 +572,18 @@ namespace Shin
         public ATTACK_TYPE AttackType;
         public string AnimationName;
 
+        public ATTACK_INPUT_TYPE AttackInputType;
+
+        //Input
+
         [Range(0f, 1f)]
         [Tooltip("현재 공격 애니메이션(레이어 0) 정규화 시간이 이 값 이상일 때, 버퍼에 쌓인 LinkedAttack 입력으로 다음 공격이 실행됩니다.")]
         public float NextAttackChainUnlockNormalizedTime = 0.35f;
+
+        //AI
+        public float AttackPriority;
+        public float AIAttackDistance;
+        //AI 끝
 
         public SerializedDictionary<INPUT_TYPE, string> LinkedAttack = new SerializedDictionary<INPUT_TYPE, string>();
 
