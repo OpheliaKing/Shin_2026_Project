@@ -37,14 +37,20 @@ namespace Shin
 
         public void SetMoveAnimationByInputDirection()
         {
+            bool isAi = _characterAIState == CHARACTER_AI_STATE.AI;
+            Vector2 inputDirection = isAi ? GetAIMoveAnimationInput() : IntendedMoveDirection;
+
             if (!CharacterState.IsMoveAble())
             {
-                return;
+                if (!isAi)
+                {
+                    return;
+                }
+
+                inputDirection = Vector2.zero;
             }
 
             float movementMaxValue = GetMovementAnimationMaxValue();
-
-            Vector2 inputDirection = IntendedMoveDirection;
             float targetMoveX = Mathf.Clamp(inputDirection.x, -1f, 1f) * movementMaxValue;
             float targetMoveY = Mathf.Clamp(inputDirection.y, -1f, 1f) * movementMaxValue;
 
@@ -54,6 +60,11 @@ namespace Shin
             float t = Mathf.Clamp01(Time.deltaTime * _moveAnimationLerpSpeed);
             float nextMoveX = Mathf.Lerp(currentMoveX, targetMoveX, t);
             float nextMoveY = Mathf.Lerp(currentMoveY, targetMoveY, t);
+
+            if (Animator.runtimeAnimatorController == null)
+            {
+                return;
+            }
 
             Animator.SetFloat(ANIM_PARAM_MOVE_X, nextMoveX);
             Animator.SetFloat(ANIM_PARAM_MOVE_Y, nextMoveY);

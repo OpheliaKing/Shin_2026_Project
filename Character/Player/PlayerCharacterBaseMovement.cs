@@ -8,7 +8,21 @@ namespace Shin
 
         public void MoveInput(Vector2 input)
         {
+            if (!IsPlayerInputAllowed)
+            {
+                ClearPlayerControlInput();
+                return;
+            }
+
             _moveInput = input;
+        }
+
+        public void ClearPlayerControlInput()
+        {
+            _moveInput = Vector2.zero;
+            SetIntendedMoveDirection(Vector2.zero);
+            StopMovementRequest();
+            Move(Vector2.zero);
         }
 
         /// <summary>
@@ -16,6 +30,12 @@ namespace Shin
         /// </summary>
         public void MoveFromCameraRelativeInput(Vector2 input)
         {
+            if (!IsPlayerInputAllowed)
+            {
+                ClearPlayerControlInput();
+                return;
+            }
+
             SetIntendedMoveDirection(input);
 
             if (input.sqrMagnitude >= 1e-8f && CurrentFocusCamera != null)
@@ -57,6 +77,11 @@ namespace Shin
 
         public void Shift_Left_Input(float value)
         {
+            if (!IsPlayerInputAllowed)
+            {
+                return;
+            }
+
             Debug.Log("Shift_Left_Input: " + value);
 
             MOVEMENT_STATE state = value > 0f ? MOVEMENT_STATE.RUN : MOVEMENT_STATE.WALK;

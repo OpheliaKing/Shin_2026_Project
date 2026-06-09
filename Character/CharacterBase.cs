@@ -27,6 +27,8 @@ namespace Shin
             }
         }
 
+        public bool IsPlayerInputAllowed => CharacterState.IsPlayerInputAllowed();
+
         protected virtual void Awake()
         {
             Init();

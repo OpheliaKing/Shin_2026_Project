@@ -22,47 +22,74 @@ namespace Shin
 
         public void OnMove(InputValue value)
         {
-            if (Player != null)
+            if (!TryGetInputTarget(out PlayerCharacterBase player))
             {
-                Debug.Log("OnMove: " + value.Get<Vector2>());
-                Player.MoveInput(value.Get<Vector2>());
+                return;
             }
+
+            Debug.Log("OnMove: " + value.Get<Vector2>());
+            player.MoveInput(value.Get<Vector2>());
         }
 
         public void OnClick_Left(InputValue value)
         {
-            if (Player != null)
+            if (!TryGetInputTarget(out PlayerCharacterBase player))
             {
-                var ispressed = value.Get<float>() > 0f;
-                Debug.Log("OnClick_Left: " + ispressed);
-                Player.AttackInput(INPUT_TYPE.LEFT_CLICK, ispressed);
+                return;
             }
+
+            var ispressed = value.Get<float>() > 0f;
+            Debug.Log("OnClick_Left: " + ispressed);
+            player.AttackInput(INPUT_TYPE.LEFT_CLICK, ispressed);
         }
 
         public void OnClick_Right(InputValue value)
         {
-            if (Player != null)
+            if (!TryGetInputTarget(out PlayerCharacterBase player))
             {
-                var ispressed = value.Get<float>() > 0f;
-                Debug.Log("OnClick_Right: " + ispressed);
-                Player.AttackInput(INPUT_TYPE.RIGHT_CLICK, ispressed);
+                return;
             }
+
+            var ispressed = value.Get<float>() > 0f;
+            Debug.Log("OnClick_Right: " + ispressed);
+            player.AttackInput(INPUT_TYPE.RIGHT_CLICK, ispressed);
         }
 
         public void OnShift_Left(InputValue value)
         {
-            if (Player != null)
+            if (!TryGetInputTarget(out PlayerCharacterBase player))
             {
-                Player.Shift_Left_Input(value.Get<float>());
+                return;
             }
+
+            player.Shift_Left_Input(value.Get<float>());
         }
 
         public void OnMove_Camera(InputValue value)
         {
-            if (Player != null)
+            if (!TryGetInputTarget(out PlayerCharacterBase player))
             {
-                Player.MoveCamera(value.Get<Vector2>());
+                return;
             }
+
+            player.MoveCamera(value.Get<Vector2>());
+        }
+
+        private bool TryGetInputTarget(out PlayerCharacterBase player)
+        {
+            player = Player;
+            if (player == null)
+            {
+                return false;
+            }
+
+            if (!player.IsPlayerInputAllowed)
+            {
+                player.ClearPlayerControlInput();
+                return false;
+            }
+
+            return true;
         }
     }
 

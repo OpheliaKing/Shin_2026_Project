@@ -12,6 +12,7 @@ namespace Shin
                 case CHARACTER_STATE.DIE:
                 case CHARACTER_STATE.HIT:
                 case CHARACTER_STATE.ATTACK:
+                case CHARACTER_STATE.ATTACK_MOVEABLE:
                     return false;
                 default:
                     return true;
@@ -31,6 +32,11 @@ namespace Shin
                 default:
                     return true;
             }
+        }
+
+        public static bool IsPlayerInputAllowed(this CHARACTER_STATE state)
+        {
+            return state != CHARACTER_STATE.DIE;
         }
         
         public static bool IsNullOrEmpty(this string str)

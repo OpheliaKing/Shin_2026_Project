@@ -9,6 +9,7 @@ namespace Shin
     {
         partial void InitCombatHealth();
         partial void OnExitState_AttackComboHook(CHARACTER_STATE currentState, CHARACTER_STATE nextState);
+        partial void OnAIAttackAnimationEnded(AttackData endedAttack);
 
         [Header("Combat")]
         [SerializeField]
@@ -18,6 +19,11 @@ namespace Shin
 
         public int Health => _health;
         public int MaxHealth => _maxHealth;
+
+        public bool IsCombatAlive()
+        {
+            return CharacterState != CHARACTER_STATE.DIE && _health > 0;
+        }
 
         partial void InitCombatHealth()
         {
@@ -186,7 +192,7 @@ namespace Shin
 
         public void AttackInput(INPUT_TYPE inputType, bool isPressed)
         {
-            if (!CharacterState.IsAttackAble())
+            if (!IsPlayerInputAllowed || !CharacterState.IsAttackAble())
             {
                 return;
             }
@@ -276,6 +282,7 @@ namespace Shin
 
             _hasQueuedComboInput = false;
 
+            StopMovementRequest();
             ChangeCharacterState(CHARACTER_STATE.ATTACK);
 
             attackData.AttackStartEvent?.Invoke();
@@ -430,6 +437,12 @@ namespace Shin
                     Attack(linkedTid);
                     return;
                 }
+
+                currentAttack.AttackEndEvent?.Invoke();
+                ClearAttackComboBufferAndCurrentTid();
+                ChangeCharacterState(CHARACTER_STATE.IDLE);
+                OnAIAttackAnimationEnded(currentAttack);
+                return;
             }
 
             currentAttack.AttackEndEvent?.Invoke();

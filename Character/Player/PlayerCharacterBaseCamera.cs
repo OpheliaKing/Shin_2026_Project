@@ -61,6 +61,11 @@ namespace Shin
 
         public void MoveCamera(Vector2 input)
         {
+            if (!IsPlayerInputAllowed)
+            {
+                return;
+            }
+
             if (CurrentFocusCamera != null)
             {
                 if (CurrentFocusCamera.GetPivotType() == PLAYER_CAMERA_ROTATE_TYPE.CHARACTER)

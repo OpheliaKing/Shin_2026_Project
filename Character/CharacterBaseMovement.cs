@@ -76,26 +76,54 @@ namespace Shin
         }
 
         /// <summary>
+        /// 이동 요청 속도를 즉시 0으로 만듭니다. 공격·피격 등 이동 불가 상태 전환 시 호출합니다.
+        /// </summary>
+        protected void StopMovementRequest()
+        {
+            _requestedWorldVelocity = Vector3.zero;
+        }
+
+        /// <summary>
         /// 월드 XZ 평면상의 이동 방향(x, z)을 받아 이동 요청만 갱신합니다. 위치/회전 적용은 <see cref="FixedUpdate"/>에서 처리합니다.
         /// </summary>
         public void Move(Vector2 worldHorizontalDirection)
         {
             if (!CharacterState.IsMoveAble())
             {
-                _requestedWorldVelocity = Vector3.zero;
+                StopMovementRequest();
                 return;
             }
 
             if (worldHorizontalDirection.sqrMagnitude < 1e-8f)
             {
-                _requestedWorldVelocity = Vector3.zero;
-                ChangeCharacterState(CHARACTER_STATE.IDLE);
+                StopMovementRequest();
+                if (_characterState != CHARACTER_STATE.IDLE)
+                {
+                    ChangeCharacterState(CHARACTER_STATE.IDLE);
+                }
+
                 return;
             }
 
-            ChangeCharacterState(CHARACTER_STATE.MOVE);
+            if (_characterState != CHARACTER_STATE.MOVE)
+            {
+                ChangeCharacterState(CHARACTER_STATE.MOVE);
+            }
             Vector3 moveDirection = new Vector3(worldHorizontalDirection.x, 0f, worldHorizontalDirection.y).normalized;
             _requestedWorldVelocity = moveDirection * GetMovementSpeed();
+        }
+
+        /// <summary>
+        /// AI 이동 애니용. 이동 중에는 전진 걷기(0, 1)를 사용합니다. 회전은 <see cref="ApplyPendingRotation"/>이 담당합니다.
+        /// </summary>
+        protected Vector2 GetAIMoveAnimationInput()
+        {
+            if (_requestedWorldVelocity.sqrMagnitude < 1e-8f)
+            {
+                return Vector2.zero;
+            }
+
+            return new Vector2(0f, 1f);
         }
 
         private void ApplyRequestedMovement()

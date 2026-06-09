@@ -27,6 +27,23 @@ namespace Shin
         [SerializeField, Min(0.05f)]
         private float _navPathRecalculateInterval = 0.25f;
 
+        [SerializeField, Min(0f)]
+        [Tooltip("공격 사거리 밖으로 이 거리만큼 더 벌어져야 다시 추적을 시작합니다. 경계에서 멈칫거림을 줄입니다.")]
+        private float _aiAttackDistanceHysteresis = 0.35f;
+
+        [SerializeField, Min(1f)]
+        [Tooltip("NavMesh 조향 방향을 부드럽게 바꿉니다. 높을수록 코너에서 덜 튑니다.")]
+        private float _aiSteeringSmoothSpeed = 10f;
+
+        [SerializeField, Min(0.05f)]
+        [Tooltip("경로 조향이 잠깐 실패해도 이 시간 동안은 마지막 방향으로 이동합니다.")]
+        private float _aiSteeringFailGraceTime = 0.2f;
+
+        private bool _aiWithinAttackRange;
+        private Vector3 _smoothedSteeringDirection;
+        private Vector3 _lastValidSteeringDirection;
+        private float _lastValidSteeringTime;
+
         public CHARACTER_AI_STATE CharacterAIState => _characterAIState;
 
         protected void EnsureDefaultPlayerAIState()
@@ -73,20 +90,25 @@ namespace Shin
 
             if (IsInComboBufferableState(CharacterState))
             {
-                Move(Vector2.zero);
+                StopAIMovement();
+                if (TryGetAlivePlayerTarget(out CharacterBase attackTarget))
+                {
+                    FaceTarget(attackTarget.transform.position);
+                }
+
                 return;
             }
 
-            CharacterBase player = FindPlayerTarget();
-            if (player == null)
+            if (!TryGetAlivePlayerTarget(out CharacterBase player))
             {
-                Move(Vector2.zero);
+                _aiWithinAttackRange = false;
+                StopAIMovement();
                 return;
             }
 
-            if (!CharacterState.IsAttackAble())
+            if (CharacterState == CHARACTER_STATE.HIT || CharacterState == CHARACTER_STATE.DIE)
             {
-                Move(Vector2.zero);
+                StopAIMovement();
                 return;
             }
 
@@ -96,29 +118,126 @@ namespace Shin
                 return;
             }
 
-            Vector3 toPlayer = player.transform.position - transform.position;
-            toPlayer.y = 0f;
-            float attackDistanceSqr = aiAttack.AIAttackDistance * aiAttack.AIAttackDistance;
+            UpdateAIAttackRangeState(player, aiAttack);
 
-            if (toPlayer.sqrMagnitude > attackDistanceSqr)
+            if (TryStartAIAttack(player, aiAttack))
             {
-                if (!TryGetNavMeshSteeringDirection(player.transform.position, out Vector3 steeringDirection))
-                {
-                    Move(Vector2.zero);
-                    return;
-                }
-
-                Move(new Vector2(steeringDirection.x, steeringDirection.z));
                 return;
             }
 
-            if (toPlayer.sqrMagnitude > 1e-8f)
+            if (!_aiWithinAttackRange)
             {
-                SetIntendedLookDirection(toPlayer.normalized);
+                if (!TryResolveChaseSteeringDirection(player.transform.position, out Vector3 steeringDirection))
+                {
+                    StopAIMovement();
+                    return;
+                }
+
+                ApplyChaseMove(steeringDirection);
+                return;
             }
 
+            StopAIMovement();
+            FaceTarget(player.transform.position);
+        }
+
+        partial void OnAIAttackAnimationEnded(AttackData endedAttack)
+        {
+            ReevaluateAIAttackRangeAfterAttack(endedAttack);
+        }
+
+        private void StopAIMovement()
+        {
+            StopMovementRequest();
+            _smoothedSteeringDirection = Vector3.zero;
             Move(Vector2.zero);
+        }
+
+        private void FaceTarget(Vector3 targetWorldPosition)
+        {
+            Vector3 toTarget = targetWorldPosition - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude > 1e-8f)
+            {
+                SetIntendedLookDirection(toTarget.normalized);
+            }
+        }
+
+        private void UpdateAIAttackRangeState(CharacterBase player, AttackData aiAttack)
+        {
+            Vector3 toPlayer = player.transform.position - transform.position;
+            toPlayer.y = 0f;
+            float distanceToPlayer = toPlayer.magnitude;
+            float attackDistance = aiAttack.AIAttackDistance;
+            float resumeChaseDistance = attackDistance + _aiAttackDistanceHysteresis;
+
+            if (_aiWithinAttackRange)
+            {
+                if (distanceToPlayer > resumeChaseDistance)
+                {
+                    _aiWithinAttackRange = false;
+                }
+            }
+            else if (distanceToPlayer <= attackDistance)
+            {
+                _aiWithinAttackRange = true;
+            }
+        }
+
+        private void ReevaluateAIAttackRangeAfterAttack(AttackData endedAttack)
+        {
+            StopAIMovement();
+
+            if (!TryGetAlivePlayerTarget(out CharacterBase player) || endedAttack == null)
+            {
+                _aiWithinAttackRange = false;
+                return;
+            }
+
+            Vector3 toPlayer = player.transform.position - transform.position;
+            toPlayer.y = 0f;
+            float distanceToPlayer = toPlayer.magnitude;
+            _aiWithinAttackRange = distanceToPlayer <= endedAttack.AIAttackDistance;
+        }
+
+        private bool TryStartAIAttack(CharacterBase player, AttackData aiAttack)
+        {
+            if (!_aiWithinAttackRange)
+            {
+                return false;
+            }
+
+            if (!CanStartAIAttack(player, aiAttack))
+            {
+                return false;
+            }
+
+            StopAIMovement();
+            FaceTarget(player.transform.position);
             Attack(aiAttack.Tid);
+            return true;
+        }
+
+        private bool CanStartAIAttack(CharacterBase player, AttackData aiAttack)
+        {
+            if (!IsValidAITarget(player) || aiAttack == null)
+            {
+                return false;
+            }
+
+            if (!CharacterState.IsAttackAble())
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(_currentAttackTid))
+            {
+                return false;
+            }
+
+            Vector3 toPlayer = player.transform.position - transform.position;
+            toPlayer.y = 0f;
+            return toPlayer.magnitude <= aiAttack.AIAttackDistance;
         }
 
         private void UpdateEnemyChaseMovementFallback(CharacterBase player)
@@ -131,13 +250,59 @@ namespace Shin
                 return;
             }
 
-            if (!TryGetNavMeshSteeringDirection(player.transform.position, out Vector3 steeringDirection))
+            if (!TryResolveChaseSteeringDirection(player.transform.position, out Vector3 steeringDirection))
             {
                 Move(Vector2.zero);
                 return;
             }
 
-            Move(new Vector2(steeringDirection.x, steeringDirection.z));
+            ApplyChaseMove(steeringDirection);
+        }
+
+        private bool TryResolveChaseSteeringDirection(Vector3 destination, out Vector3 steeringDirection)
+        {
+            if (TryGetNavMeshSteeringDirection(destination, out steeringDirection))
+            {
+                _lastValidSteeringDirection = steeringDirection;
+                _lastValidSteeringTime = Time.time;
+                return true;
+            }
+
+            if (_lastValidSteeringDirection.sqrMagnitude >= 1e-8f
+                && Time.time - _lastValidSteeringTime <= _aiSteeringFailGraceTime)
+            {
+                steeringDirection = _lastValidSteeringDirection;
+                return true;
+            }
+
+            steeringDirection = Vector3.zero;
+            return false;
+        }
+
+        private void ApplyChaseMove(Vector3 steeringDirection)
+        {
+            steeringDirection.y = 0f;
+            if (steeringDirection.sqrMagnitude < 1e-8f)
+            {
+                Move(Vector2.zero);
+                return;
+            }
+
+            steeringDirection.Normalize();
+
+            if (_smoothedSteeringDirection.sqrMagnitude < 1e-8f)
+            {
+                _smoothedSteeringDirection = steeringDirection;
+            }
+            else
+            {
+                _smoothedSteeringDirection = Vector3.Slerp(
+                    _smoothedSteeringDirection,
+                    steeringDirection,
+                    Time.deltaTime * _aiSteeringSmoothSpeed).normalized;
+            }
+
+            Move(new Vector2(_smoothedSteeringDirection.x, _smoothedSteeringDirection.z));
         }
 
         private void EnsureAIMovementState()
@@ -148,15 +313,39 @@ namespace Shin
             }
         }
 
+        private bool TryGetAlivePlayerTarget(out CharacterBase player)
+        {
+            player = FindPlayerTarget();
+            if (!IsValidAITarget(player))
+            {
+                player = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsValidAITarget(CharacterBase target)
+        {
+            if (target == null || !target.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            return target.IsCombatAlive();
+        }
+
         private CharacterBase FindPlayerTarget()
         {
-            if (_cachedPlayerTarget != null && _cachedPlayerTarget.gameObject.activeInHierarchy)
+            if (IsValidAITarget(_cachedPlayerTarget))
             {
                 return _cachedPlayerTarget;
             }
 
+            _cachedPlayerTarget = null;
+
             PlayerCharacterBase playerCharacter = FindAnyObjectByType<PlayerCharacterBase>();
-            if (playerCharacter != null && playerCharacter != this)
+            if (IsValidAITarget(playerCharacter) && playerCharacter != this)
             {
                 _cachedPlayerTarget = playerCharacter;
                 return _cachedPlayerTarget;
@@ -170,6 +359,11 @@ namespace Shin
             {
                 CharacterBase candidate = characters[i];
                 if (candidate == this || candidate.CharacterAIState == CHARACTER_AI_STATE.AI)
+                {
+                    continue;
+                }
+
+                if (!IsValidAITarget(candidate))
                 {
                     continue;
                 }
@@ -291,7 +485,15 @@ namespace Shin
             toLookAhead.y = 0f;
             if (toLookAhead.sqrMagnitude < 1e-8f)
             {
-                return false;
+                Vector3 segmentDirection = corners[segmentIndex + 1] - corners[segmentIndex];
+                segmentDirection.y = 0f;
+                if (segmentDirection.sqrMagnitude < 1e-8f)
+                {
+                    return false;
+                }
+
+                direction = segmentDirection.normalized;
+                return true;
             }
 
             direction = toLookAhead.normalized;
