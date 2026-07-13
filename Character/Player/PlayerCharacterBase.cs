@@ -34,6 +34,11 @@ namespace Shin
                 ClearPlayerControlInput();
             }
         }
+
+        protected override void OnInputBlocked()
+        {
+            ClearPlayerControlInput();
+        }
     }
 }
 

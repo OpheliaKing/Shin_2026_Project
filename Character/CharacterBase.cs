@@ -27,7 +27,7 @@ namespace Shin
             }
         }
 
-        public bool IsPlayerInputAllowed => CharacterState.IsPlayerInputAllowed();
+        public bool IsPlayerInputAllowed => CharacterState.IsPlayerInputAllowed() && !HasInputBlock;
 
         protected virtual void Awake()
         {
@@ -84,6 +84,7 @@ namespace Shin
 
         protected virtual void Update()
         {
+            RemoveExpiredInputBlocks();
             UpdateCharacterAI();
             SetMoveAnimationByInputDirection();
         }

@@ -46,12 +46,42 @@ namespace Shin
 
             if (_health <= 0 && CharacterState != CHARACTER_STATE.DIE)
             {
+                ClearInputBlocks();
                 ChangeCharacterState(CHARACTER_STATE.DIE, true);
+                return;
             }
+
+            ApplyHitReaction(attackInfo);
         }
 
         protected virtual void OnCombatDamaged(CharacterBase attacker, AttackInfoData attackInfo, int damageAmount)
         {
+        }
+
+        private void ApplyHitReaction(AttackInfoData attackInfo)
+        {
+            if (attackInfo == null || CharacterState == CHARACTER_STATE.DIE)
+            {
+                return;
+            }
+
+            StopMovementRequest();
+
+            if (!string.IsNullOrEmpty(attackInfo.HitAnimationName)
+                && Animator != null
+                && Animator.runtimeAnimatorController != null)
+            {
+                Animator.CrossFade(attackInfo.HitAnimationName, 0.05f);
+            }
+
+            if (attackInfo.HitStunValue <= 0f)
+            {
+                return;
+            }
+
+            RemoveInputBlocksByReason(INPUT_BLOCK_REASON.HitStun);
+            AddInputBlock(INPUT_BLOCK_REASON.HitStun, attackInfo.HitStunValue);
+            ChangeCharacterState(CHARACTER_STATE.HIT, true);
         }
 
         [SerializeField]
@@ -286,7 +316,10 @@ namespace Shin
             ChangeCharacterState(CHARACTER_STATE.ATTACK);
 
             attackData.AttackStartEvent?.Invoke();
-            _animator.CrossFade(attackData.AnimationName, 0.2f);
+            if (Animator != null && Animator.runtimeAnimatorController != null)
+            {
+                Animator.CrossFade(attackData.AnimationName, 0.2f);
+            }
             _currentAttackTid = attackTid;
         }
 
@@ -343,12 +376,12 @@ namespace Shin
 
         private float GetPrimaryLayerNormalizedTime()
         {
-            if (_animator == null)
+            if (Animator == null)
             {
                 return 0f;
             }
 
-            AnimatorStateInfo info = _animator.GetCurrentAnimatorStateInfo(0);
+            AnimatorStateInfo info = Animator.GetCurrentAnimatorStateInfo(0);
             float nt = info.normalizedTime;
             if (info.loop)
             {
@@ -610,6 +643,13 @@ namespace Shin
         public ATTACK_FRIENDLY_TYPE AttackFriendlyType = ATTACK_FRIENDLY_TYPE.ENEMY;
         public float DamageValue;
         public float CameraShakeGain = 0.3f;
+
+        [Min(0f)]
+        [Tooltip("피격 대상의 경직도. 높을수록 피격 경직이 강하게/길게 적용됩니다.")]
+        public float HitStunValue;
+
+        [Tooltip("이 공격을 맞았을 때 피격 대상이 재생할 히트 애니메이션 이름입니다.")]
+        public string HitAnimationName;
 
         //MELEE
         public Vector3 HitBoxSize;
